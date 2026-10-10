@@ -1,0 +1,22 @@
+# Python
+ml/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data dan hasil eksperimen (besar; berisi rekaman subjek)
+ml/data/
+ml/hasil/
+ml/hasil_*/
+ml/model/
+
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins-dependencies
+app/android/.gradle/
+app/android/build/
+app/android/local.properties
+app/android/app/.cxx/
+*.iml
+.idea/

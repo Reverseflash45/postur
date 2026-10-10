@@ -1,0 +1,28 @@
+{
+ "jenis": "aturan",
+ "gerakan": "squat",
+ "aturan": [
+  {
+   "label": "SQ-1",
+   "fitur": "lutut_min",
+   "indeks_fitur": 60,
+   "op": ">",
+   "ambang": 106.24275940621267
+  },
+  {
+   "label": "SQ-2",
+   "fitur": "rasio_lutut_min",
+   "indeks_fitur": 50,
+   "op": "<",
+   "ambang": 0.6443869686337351
+  },
+  {
+   "label": "SQ-3",
+   "fitur": "condong_max",
+   "indeks_fitur": 41,
+   "op": ">",
+   "ambang": 31.10185641013934
+  }
+ ],
+ "bawaan": "SQ-0"
+}

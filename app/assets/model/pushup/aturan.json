@@ -1,0 +1,28 @@
+{
+ "jenis": "aturan",
+ "gerakan": "pushup",
+ "aturan": [
+  {
+   "label": "PU-3",
+   "fitur": "siku_min",
+   "indeks_fitur": 65,
+   "op": ">",
+   "ambang": 68.70051931747928
+  },
+  {
+   "label": "PU-1",
+   "fitur": "lengkung_max",
+   "indeks_fitur": 46,
+   "op": ">",
+   "ambang": 0.09677989651905747
+  },
+  {
+   "label": "PU-2",
+   "fitur": "lengkung_min",
+   "indeks_fitur": 45,
+   "op": "<",
+   "ambang": -0.08029787285736834
+  }
+ ],
+ "bawaan": "PU-0"
+}

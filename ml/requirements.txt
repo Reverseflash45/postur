@@ -1,0 +1,8 @@
+matplotlib==3.10.9
+mediapipe==1.1.0
+numpy==2.2.6
+opencv-contrib-python==5.0.0.93
+pytest==9.1.1
+scikit-learn==1.7.2
+scipy==1.15.3
+tensorflow==2.21.0
