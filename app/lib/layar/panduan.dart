@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../data/pengaturan.dart';
@@ -153,11 +154,15 @@ class _HalamanKamera extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Kerangka(
-      judul: 'TARUH\nPONSEL',
+      judul: kIsWeb ? 'TARUH\nKAMERA' : 'TARUH\nPONSEL',
       gambar: CustomPaint(painter: _DenahKamera()),
       isi: const [
-        'Squat: ponsel tegak setinggi pinggang, depan-serong ±45°, jarak 2–3 meter.',
-        'Push-up: ponsel mendatar di lantai, dari samping, jarak 2–3 meter.',
+        kIsWeb
+            ? 'Squat: kamera setinggi pinggang (laptop di meja atau ponsel disandarkan), depan-serong ±45°, jarak 2–3 meter.'
+            : 'Squat: ponsel tegak setinggi pinggang, depan-serong ±45°, jarak 2–3 meter.',
+        kIsWeb
+            ? 'Push-up: kamera dekat lantai, dari samping, jarak 2–3 meter.'
+            : 'Push-up: ponsel mendatar di lantai, dari samping, jarak 2–3 meter.',
         'Seluruh badan dari kepala sampai kaki harus masuk bingkai. Aplikasi memeriksa ini sebelum mulai.',
       ],
     );
@@ -307,7 +312,13 @@ class _DenahKamera extends CustomPainter {
       Paint()..color = Pal.sinyal,
     );
     canvas.restore();
-    _teks(canvas, 'PONSEL', ponsel + const Offset(-22, 16), Pal.redup, 10);
+    _teks(
+      canvas,
+      kIsWeb ? 'KAMERA' : 'PONSEL',
+      ponsel + const Offset(-22, 16),
+      Pal.redup,
+      10,
+    );
 
     // Label jarak di tengah garis pandang.
     final tengah = (orang + ponsel) / 2;

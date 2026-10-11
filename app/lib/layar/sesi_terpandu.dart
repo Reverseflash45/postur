@@ -261,7 +261,7 @@ class _LayarSesiTerpanduState extends State<LayarSesiTerpandu> {
                             nomor: _dipilih! + 1,
                             jumlah: r.langkah.length,
                             gantiPosisi: _gantiPosisi(_dipilih!),
-                            onRekam: kameraTersedia ? _rekam : null,
+                            onRekam: bisaRekamData ? _rekam : null,
                             onBacakan: _bacakan,
                             onLewati: _langkah!.tuntas ? null : _lewati,
                           )
@@ -271,11 +271,11 @@ class _LayarSesiTerpanduState extends State<LayarSesiTerpandu> {
                             // true = pemanggil langsung membuka pendaftaran subjek baru.
                             onSubjekBaru: () => Navigator.of(context).pop(true),
                           ),
-                        if (!kameraTersedia)
+                        if (!bisaRekamData)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
-                              'Perekaman hanya bisa dilakukan di aplikasi Android.',
+                              'Perekaman data penelitian hanya di aplikasi Android, supaya pose estimator-nya sama dengan saat aplikasi dipakai.',
                               textAlign: TextAlign.center,
                               style: Huruf.teks(warna: Pal.salah, ukuran: 13),
                             ),

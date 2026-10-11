@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -726,8 +727,16 @@ class _PanelPosisi extends StatelessWidget {
     final diam = mesin.diam;
     String ketJarak() {
       if (p == null) return 'Menunggu badan terdeteksi';
-      if (p < 0.3) return 'Terlalu jauh, majukan ponsel';
-      if (p > 0.95) return 'Terlalu dekat, mundurkan ponsel';
+      if (p < 0.3) {
+        return kIsWeb
+            ? 'Terlalu jauh, mendekat ke kamera'
+            : 'Terlalu jauh, majukan ponsel';
+      }
+      if (p > 0.95) {
+        return kIsWeb
+            ? 'Terlalu dekat, mundur dari kamera'
+            : 'Terlalu dekat, mundurkan ponsel';
+      }
       return 'Badan mengisi ${(p * 100).round()}% bingkai';
     }
 
@@ -744,7 +753,8 @@ class _PanelPosisi extends StatelessWidget {
                   style: Huruf.angka(30),
                 ),
               ),
-              Label('Ponsel ${gerakan.orientasi}', warna: Colors.white60),
+              if (!kIsWeb)
+                Label('Ponsel ${gerakan.orientasi}', warna: Colors.white60),
             ],
           ),
           const SizedBox(height: 4),
@@ -887,17 +897,21 @@ class _PanelAktif extends StatelessWidget {
                   ],
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
+              // Expanded: nama kelas yang panjang turun baris, tidak menimpa waktu.
               if (!rekam)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: _SkorTerakhir(
-                    h: terakhir,
-                    gerakan: gerakan,
-                    sorot: sorot,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: _SkorTerakhir(
+                      h: terakhir,
+                      gerakan: gerakan,
+                      sorot: sorot,
+                    ),
                   ),
                 )
-              else
+              else ...[
+                const Spacer(),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Column(
@@ -911,6 +925,7 @@ class _PanelAktif extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
             ],
           ),
           if (!rekam) ...[
@@ -982,6 +997,8 @@ class _SkorTerakhir extends StatelessWidget {
           Text(
             gerakan.kelas[h.kelas].nama.toUpperCase(),
             style: Huruf.label(warna: warna, ukuran: 10),
+            textAlign: TextAlign.end,
+            maxLines: 2,
           ),
         ],
       ),
@@ -1236,7 +1253,7 @@ class _Galat extends StatelessWidget {
             Text(
               kameraTersedia
                   ? 'KAMERA TIDAK BISA DIBUKA'
-                  : 'KAMERA HANYA DI APLIKASI ANDROID',
+                  : 'KAMERA TIDAK TERSEDIA',
               style: Huruf.angka(40),
             ),
             const SizedBox(height: 12),

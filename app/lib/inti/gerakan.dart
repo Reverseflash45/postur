@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'landmark.dart';
 
 /// Definisi gerakan dan kelasnya — salinan ml/postur/gerakan.py.
@@ -136,7 +138,9 @@ const squat = Gerakan(
       Lm.lututKi, Lm.lututKa, Lm.kakiKi, Lm.kakiKa,
     ],
   ],
-  posisiKamera: 'Ponsel tegak, depan-serong ±45°, jarak 2–3 m',
+  posisiKamera: kIsWeb
+      ? 'Kamera setinggi pinggang, depan-serong ±45°, jarak 2–3 m'
+      : 'Ponsel tegak, depan-serong ±45°, jarak 2–3 m',
   orientasi: 'Tegak',
   targetSudut: 100,
 );
@@ -200,7 +204,9 @@ const pushup = Gerakan(
     [Lm.bahuKi, Lm.sikuKi, Lm.tanganKi, Lm.pinggulKi, Lm.kakiKi],
     [Lm.bahuKa, Lm.sikuKa, Lm.tanganKa, Lm.pinggulKa, Lm.kakiKa],
   ],
-  posisiKamera: 'Ponsel mendatar di lantai, dari samping, jarak 2–3 m',
+  posisiKamera: kIsWeb
+      ? 'Kamera dekat lantai, dari samping, jarak 2–3 m'
+      : 'Ponsel mendatar di lantai, dari samping, jarak 2–3 m',
   orientasi: 'Mendatar',
   targetSudut: 95,
 );

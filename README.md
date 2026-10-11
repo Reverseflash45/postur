@@ -2,6 +2,7 @@
 
 ![Layar Postur: pilih gerakan, latihan dengan bagian tubuh yang salah menyala, dan ringkasan sesi](docs/tampilan.webp)
 
+**[Coba di browser](https://postur-tau.vercel.app)** (webcam, tanpa instalasi) ·
 **[Unduh APK terbaru](https://github.com/Reverseflash45/postur/releases/latest)** · Android 7.0+, arm64
 
 Deteksi kesalahan postur **squat** dan **push-up** dari kamera ponsel. Pose
@@ -21,6 +22,28 @@ kamera ──► pose (33 titik) ──► segmentasi repetisi ──► fitur 6
 |---|---|
 | Squat (kamera depan-serong ±45°) | SQ-0 benar · SQ-1 kurang dalam · SQ-2 lutut masuk ke dalam · SQ-3 badan terlalu condong |
 | Push-up (kamera dari samping) | PU-0 benar · PU-1 pinggul turun · PU-2 pinggul terangkat · PU-3 kurang dalam |
+
+## Versi web
+
+Aplikasi yang sama juga berjalan di browser dengan webcam:
+
+- **Pose estimation**: MediaPipe Pose Landmarker (model *full*, GPU bila ada,
+  CPU bila tidak). Keluarannya 33 titik BlazePose dengan urutan yang sama
+  dengan ML Kit, jadi fitur, segmentasi, dan model tidak berubah.
+- **Model**: aturan dan Random Forest berjalan di Dart seperti di Android.
+  1D-CNN dan LSTM memakai **berkas `.tflite` yang sama** lewat TensorFlow.js
+  TFLite (WebAssembly). Di *Uji kinerja* versi web, selisihnya terhadap
+  keluaran Python sekitar 5×10⁻⁷ dan model int8 memilih kelas yang sama di
+  8/8 repetisi contoh.
+- **Privasi**: video tidak pernah meninggalkan browser. Riwayat latihan
+  disimpan di localStorage.
+- **Batasan**: perekaman data penelitian sengaja hanya ada di Android, karena
+  data latih harus berasal dari pose estimator yang sama dengan yang dipakai
+  aplikasi (ML Kit). Ekspor .zip juga hanya di Android.
+
+Jembatan JavaScript-nya ada di `app/web/postur.js`, sumber kameranya di
+`app/lib/sumber/kamera_web.dart`, dan TFLite web di
+`app/lib/inti/klasifikasi/tflite_web.dart`.
 
 ## Isi repo
 
@@ -128,7 +151,14 @@ flutter test
 flutter build apk --release --split-per-abi
 ```
 
-Mode demo (tanpa kamera) juga jalan di web: `flutter run -d chrome`.
+**Versi web**:
+
+```
+cd app
+flutter run -d chrome            # pengembangan
+flutter build web --release      # hasil di build/web, termasuk vercel.json
+vercel deploy build/web --prod   # atau hosting statis apa pun (butuh HTTPS untuk kamera)
+```
 
 ## Pembaruan berkas uji
 

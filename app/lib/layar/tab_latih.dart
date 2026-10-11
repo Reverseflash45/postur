@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../data/pengaturan.dart';
@@ -39,7 +40,9 @@ class TabLatih extends StatelessWidget {
           Text('PILIH\nGERAKAN', style: Huruf.angka(64)),
           const SizedBox(height: 10),
           Text(
-            'Kamera menghitung repetisi dan menilai bentuk setiap gerakan, langsung di ponsel.',
+            kIsWeb
+                ? 'Kamera menghitung repetisi dan menilai bentuk setiap gerakan, langsung di browser. Video tidak pernah diunggah.'
+                : 'Kamera menghitung repetisi dan menilai bentuk setiap gerakan, langsung di ponsel.',
             style: Huruf.teks(warna: Pal.redup),
           ),
           const SizedBox(height: 22),

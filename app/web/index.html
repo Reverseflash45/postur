@@ -1,46 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
+  <!-- Diganti oleh argumen --base-href saat `flutter build web`. -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Postur: hitung repetisi squat dan push-up dan deteksi kesalahan postur dari webcam, langsung di browser.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0C0E0F">
 
-  <!-- iOS meta tags & icons -->
+  <meta property="og:title" content="Postur">
+  <meta property="og:description" content="Deteksi kesalahan postur squat dan push-up dari webcam. Pose estimation dan model berjalan di browser, video tidak diunggah.">
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="postur">
+  <meta name="apple-mobile-web-app-title" content="Postur">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>postur</title>
+  <title>Postur</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0C0E0F; }
+    #muat {
+      position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center;
+      padding: 0 28px; max-width: 640px; margin: 0 auto; color: #F1EFE8;
+      font: 500 14px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; transition: opacity .3s;
+    }
+    #muat b { color: #FFC93C; letter-spacing: .14em; font-size: 12px; }
+    #muat h1 { font: 800 56px/0.95 "Arial Narrow", "Roboto Condensed", system-ui, sans-serif; letter-spacing: -.01em; margin: 10px 0 14px; text-transform: uppercase; }
+    #muat p { color: #9AA0A5; margin: 0; }
+    #muat .bilah { margin-top: 22px; height: 3px; background: #262B2F; overflow: hidden; }
+    #muat .bilah i { display: block; height: 100%; width: 35%; background: #FFC93C; animation: geser 1.1s ease-in-out infinite; }
+    @keyframes geser { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+    @media (prefers-reduced-motion: reduce) { #muat .bilah i { animation: none; width: 100%; opacity: .5; } }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="muat" role="status">
+    <b>POSTUR</b>
+    <h1>Memuat</h1>
+    <p>Pose estimation dan model berjalan di browser ini. Video dari kamera tidak pernah diunggah.</p>
+    <div class="bilah"><i></i></div>
+  </div>
+  <script>
+    window.addEventListener("flutter-first-frame", function () {
+      var m = document.getElementById("muat");
+      if (!m) return;
+      m.style.opacity = "0";
+      setTimeout(function () { m.remove(); }, 350);
+    });
+  </script>
+  <script src="postur.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

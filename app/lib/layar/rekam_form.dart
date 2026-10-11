@@ -181,7 +181,7 @@ class _LayarRekamFormState extends State<LayarRekamForm> {
                   ),
                   const SizedBox(height: 20),
                   FilledButton(
-                    onPressed: _valid && kameraTersedia ? _mulai : null,
+                    onPressed: _valid && bisaRekamData ? _mulai : null,
                     style: FilledButton.styleFrom(
                       backgroundColor: Pal.rekam,
                       foregroundColor: Pal.kapur,
@@ -189,11 +189,11 @@ class _LayarRekamFormState extends State<LayarRekamForm> {
                     ),
                     child: Text('● REKAM ${_kelas.kode}'),
                   ),
-                  if (!kameraTersedia)
+                  if (!bisaRekamData)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        'Perekaman hanya bisa dilakukan di aplikasi Android.',
+                        'Perekaman data penelitian hanya di aplikasi Android, supaya pose estimator-nya sama dengan saat aplikasi dipakai.',
                         textAlign: TextAlign.center,
                         style: Huruf.teks(warna: Pal.salah, ukuran: 13),
                       ),

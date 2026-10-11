@@ -8,12 +8,12 @@ import 'klasifikasi.dart';
 
 const bool tfliteTersedia = true;
 
-Pengklasifikasi buatTflite(
+Future<Pengklasifikasi> buatTflite(
   String id,
   Uint8List isi, {
   required List<double> rerata,
   required List<double> sb,
-}) => KlasifikasiTflite(id, isi, rerata: rerata, sb: sb);
+}) async => KlasifikasiTflite(id, isi, rerata: rerata, sb: sb);
 
 /// 1D-CNN atau LSTM lewat interpreter TFLite (float32 atau int8).
 ///

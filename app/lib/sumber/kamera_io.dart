@@ -10,6 +10,9 @@ import 'sumber_pose.dart';
 
 const bool kameraTersedia = true;
 
+/// Data penelitian hanya direkam dengan pose estimator aplikasi (ML Kit).
+const bool bisaRekamData = true;
+
 /// Kamera ponsel + ML Kit Pose Detection (model accurate, mode stream).
 ///
 /// Frame yang datang saat frame sebelumnya masih diproses dilewati, jadi

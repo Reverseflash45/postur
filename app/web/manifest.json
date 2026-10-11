@@ -1,12 +1,12 @@
 {
-    "name": "postur",
-    "short_name": "postur",
+    "name": "Postur",
+    "short_name": "Postur",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0C0E0F",
+    "theme_color": "#0C0E0F",
+    "description": "Deteksi kesalahan postur squat dan push-up dari webcam, langsung di browser.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

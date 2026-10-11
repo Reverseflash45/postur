@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,6 +13,9 @@ import '../inti/paket_model.dart';
 import '../inti/repetisi.dart';
 import '../sumber/sumber_rekaman.dart';
 import '../tema.dart';
+
+/// Nama pose estimator yang dipakai platform ini.
+const _penaksir = kIsWeb ? 'MediaPipe web' : 'ML Kit';
 
 /// Hasil pengukuran satu model.
 class _Ukur {
@@ -239,7 +243,7 @@ class _LayarUjiKinerjaState extends State<LayarUjiKinerja> {
                   const SizedBox(height: 10),
                   Text(
                     'Setiap model menilai repetisi contoh $_ulang kali. Keluarannya juga dicocokkan dengan '
-                    'Python untuk memastikan model di ponsel sama dengan yang dievaluasi.',
+                    'Python untuk memastikan model di ${kIsWeb ? 'browser' : 'ponsel'} sama dengan yang dievaluasi.',
                     style: Huruf.teks(warna: Pal.samar, ukuran: 13),
                   ),
                   if (_hasil.isNotEmpty) ...[
@@ -257,8 +261,8 @@ class _LayarUjiKinerjaState extends State<LayarUjiKinerja> {
                   _BarisTahap(
                     judul: 'Pose estimation',
                     sub: pose == null
-                        ? 'ML Kit · diukur saat latihan dengan kamera'
-                        : 'ML Kit · sesi kamera terakhir · ${pose.fps.toStringAsFixed(1)} fps',
+                        ? '$_penaksir · diukur saat latihan dengan kamera'
+                        : '$_penaksir · sesi kamera terakhir · ${pose.fps.toStringAsFixed(1)} fps',
                     nilai: pose == null ? '—' : pose.ms.toStringAsFixed(1),
                   ),
                 ],

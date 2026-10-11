@@ -93,7 +93,7 @@ class PaketModel {
         final st =
             (meta['standarisasi'] as Map<String, dynamic>)[jenis]
                 as Map<String, dynamic>;
-        m = buatTflite(
+        m = await buatTflite(
           id,
           await _bytes(id),
           rerata: [for (final v in st['rerata'] as List) (v as num).toDouble()],

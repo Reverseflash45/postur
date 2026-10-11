@@ -2,6 +2,7 @@ import '../inti/pose.dart';
 import 'sumber_pose.dart';
 
 const bool kameraTersedia = false;
+const bool bisaRekamData = false;
 
 class SumberKamera extends SumberPose {
   SumberKamera({required bool depan});
