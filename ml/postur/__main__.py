@@ -67,7 +67,12 @@ def main(argv=None):
         sesi = bangkitkan(a.subjek, a.benih)
         for x in sesi:
             simpan_sesi(x, a.keluar / x.gerakan)
-        print(f"{len(sesi)} sesi sintetis ditulis ke {a.keluar}")
+        import json
+        from .sintetis import profil_acak
+        (a.keluar / "subjek").mkdir(parents=True, exist_ok=True)
+        for p in profil_acak(a.subjek, a.benih):
+            (a.keluar / "subjek" / f"subjek-{p['kode']}.json").write_text(json.dumps(p), encoding="utf-8")
+        print(f"{len(sesi)} sesi sintetis + {a.subjek} profil subjek ditulis ke {a.keluar}")
 
     elif a.perintah == "latih":
         from .latih import eksperimen
@@ -91,6 +96,16 @@ def main(argv=None):
                   f"rep {len(reps):3d} manual {s.repetisi_manual}")
             baris += [(s.id, r.indeks, r.label) for r in reps]
         print("Repetisi per label:", dict(sorted(Counter(b[2] for b in baris).items())))
+        from .subjek import muat_profil, ringkas
+        profil = muat_profil(a.data)
+        if profil:
+            r = ringkas(profil, {s.subjek for s in sesi})
+            print(f"Profil subjek: {r['n']}; JK {r['jenis_kelamin']}; usia {r['usia']}; "
+                  f"pengalaman {r['pengalaman']}")
+            if r["tanpa_profil"]:
+                print("  tanpa profil:", ", ".join(r["tanpa_profil"]))
+            if r["tanpa_persetujuan"]:
+                print("  PERINGATAN persetujuan belum tercatat:", ", ".join(r["tanpa_persetujuan"]))
         if a.csv:
             with open(a.csv, "w", encoding="utf-8", newline="") as f:
                 w = csv.writer(f)

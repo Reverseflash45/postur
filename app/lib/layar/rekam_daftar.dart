@@ -4,11 +4,27 @@ import 'package:share_plus/share_plus.dart';
 
 import '../data/penyimpanan.dart';
 import '../data/rekaman.dart';
+import '../data/subjek.dart';
 import '../inti/gerakan.dart';
+import '../inti/protokol.dart';
 import '../tema.dart';
 import 'bersama.dart';
 import 'rekam_form.dart';
+import 'sesi_terpandu.dart';
+import 'subjek_form.dart';
 import 'tinjau.dart';
+
+typedef _DataLab = ({
+  List<InfoRekaman> rekaman,
+  List<ProfilSubjek> subjek,
+  List<RencanaSesi> sesi,
+});
+
+Future<_DataLab> _muatSemua() async => (
+  rekaman: await Rekaman.semua(),
+  subjek: await DataSubjek.semua(),
+  sesi: await DataSubjek.semuaSesi(),
+);
 
 /// Target repetisi per kelas per subjek, sesuai protokol di proposal.
 const targetPerKelas = 10;
@@ -22,10 +38,32 @@ class LayarRekamDaftar extends StatefulWidget {
 }
 
 class _LayarRekamDaftarState extends State<LayarRekamDaftar> {
-  late Future<List<InfoRekaman>> _data = Rekaman.semua();
+  late Future<_DataLab> _data = _muatSemua();
   bool _mengekspor = false;
 
-  void _segarkan() => setState(() => _data = Rekaman.semua());
+  void _segarkan() => setState(() => _data = _muatSemua());
+
+  Future<void> _buka(Widget layar) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => layar));
+    _segarkan();
+  }
+
+  /// Daftarkan subjek baru (atau lanjutkan [kode]) lalu jalankan sesinya.
+  /// Dari layar "sesi selesai", operator bisa langsung lanjut ke subjek
+  /// berikutnya tanpa kembali ke daftar.
+  Future<void> _sesi([String? kode]) async {
+    final nav = Navigator.of(context);
+    kode ??= await nav.push<String>(MaterialPageRoute(builder: (_) => const LayarSubjekBaru()));
+    while (kode != null && mounted) {
+      final lanjut = await nav.push<bool>(
+        MaterialPageRoute(builder: (_) => LayarSesiTerpandu(subjek: kode!)),
+      );
+      _segarkan();
+      if (lanjut != true || !mounted) break;
+      kode = await nav.push<String>(MaterialPageRoute(builder: (_) => const LayarSubjekBaru()));
+    }
+    _segarkan();
+  }
 
   Future<void> _ekspor(List<InfoRekaman> daftar) async {
     if (daftar.isEmpty) return;
@@ -33,8 +71,10 @@ class _LayarRekamDaftarState extends State<LayarRekamDaftar> {
     try {
       final nama =
           'postur-rekaman-${DateFormat('yyyyMMdd-HHmm').format(DateTime.now())}.zip';
+      // Profil subjek dan rencana sesi ikut diekspor untuk tabel karakteristik.
       final path = await Penyimpanan.instance.zip([
         for (final r in daftar) r.path,
+        ...await DataSubjek.semuaPath(),
       ], nama);
       if (path == null) return;
       await SharePlus.instance.share(
@@ -80,7 +120,9 @@ class _LayarRekamDaftarState extends State<LayarRekamDaftar> {
     return FutureBuilder(
       future: _data,
       builder: (context, snap) {
-        final daftar = snap.data ?? const <InfoRekaman>[];
+        final daftar = snap.data?.rekaman ?? const <InfoRekaman>[];
+        final profil = snap.data?.subjek ?? const <ProfilSubjek>[];
+        final sesi = snap.data?.sesi ?? const <RencanaSesi>[];
         // Repetisi yang dibuang saat tinjauan tidak ikut dihitung.
         final totalRep = daftar.fold(
           0,
@@ -89,19 +131,14 @@ class _LayarRekamDaftarState extends State<LayarRekamDaftar> {
         final subjek = {for (final r in daftar) r.subjek}.length;
         return Scaffold(
           floatingActionButton: FloatingActionButton.extended(
-            onPressed: () async {
-              await Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const LayarRekamForm()));
-              _segarkan();
-            },
+            onPressed: () => _sesi(),
             backgroundColor: Pal.rekam,
             foregroundColor: Pal.kapur,
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(Radius.circular(4)),
             ),
-            icon: const Icon(Icons.fiber_manual_record),
-            label: Text('REKAM SET', style: Huruf.judul(19)),
+            icon: const Icon(Icons.person_add_alt_1),
+            label: Text('SUBJEK BARU', style: Huruf.judul(19)),
           ),
           body: SafeArea(
             bottom: false,
@@ -182,7 +219,26 @@ class _LayarRekamDaftarState extends State<LayarRekamDaftar> {
                               ),
                             ),
                             const SizedBox(height: 14),
-                            _Protokol(terbuka: daftar.isEmpty),
+                            _Protokol(terbuka: daftar.isEmpty && sesi.isEmpty),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: () => _buka(const LayarRekamForm()),
+                              icon: const Icon(Icons.tune, size: 18),
+                              label: const Text('REKAM SATU SET MANUAL'),
+                            ),
+                            if (sesi.isNotEmpty) ...[
+                              JudulBagian('Subjek · ${sesi.length}'),
+                              for (final r in sesi..sort((a, b) => nomorSubjek(a.subjek).compareTo(nomorSubjek(b.subjek))))
+                                _BarisSubjek(
+                                  rencana: r,
+                                  profil: profil.where((p) => p.kode == r.subjek).firstOrNull,
+                                  onTap: () => _sesi(r.subjek),
+                                ),
+                            ],
+                            if (daftar.isNotEmpty) ...[
+                              const JudulBagian('Kesehatan dataset'),
+                              _Kesehatan(rekaman: daftar, profil: profil),
+                            ],
                             if (daftar.isEmpty) ...[
                               const SizedBox(height: 14),
                               OutlinedButton(
@@ -315,12 +371,12 @@ class _Protokol extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const langkah = [
-      'Isi kode subjek (S01, S02, …) dan minta persetujuan subjek.',
-      'Pilih gerakan dan kelas, lalu bacakan arahannya ke subjek.',
-      'Pasang ponsel sesuai petunjuk posisi kamera, lalu mulai merekam.',
-      'Subjek melakukan $targetPerKelas repetisi; hitung manual sambil menonton.',
-      'Berhenti, isi hitungan manual, simpan. Ulangi untuk kelas berikutnya.',
-      'Ketuk sesi untuk meninjau: ganti label atau buang repetisi yang salah peraga.',
+      'Ketuk SUBJEK BARU. Tunjukkan lembar informasi, minta tanda tangan persetujuan, isi data anonim.',
+      'Aplikasi menyusun urutan set yang seimbang untuk subjek itu dan membacakan instruksi tiap set.',
+      'Pasang ponsel sesuai petunjuk posisi kamera, lalu tekan REKAM.',
+      'Subjek melakukan $targetPerKelas repetisi; rekaman berhenti sendiri. Hitung manual sambil menonton.',
+      'Isi hitungan manual, simpan, istirahat 60 detik, lanjut set berikutnya.',
+      'Ketuk sesi rekaman untuk meninjau: ganti label atau buang repetisi yang salah peraga.',
       'Ekspor .zip ke laptop, lalu: python -m postur latih --data <folder>.',
     ];
     return Panel(
@@ -331,7 +387,7 @@ class _Protokol extends StatelessWidget {
         initiallyExpanded: terbuka,
         title: Text('PROTOKOL PEREKAMAN', style: Huruf.judul(20)),
         subtitle: Text(
-          'SATU SET = SATU KELAS, SATU SUBJEK',
+          'SESI TERPANDU · SATU SET = SATU KELAS',
           style: Huruf.label(ukuran: 10),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -435,6 +491,227 @@ class _Sel extends StatelessWidget {
       child: Text(
         n == 0 ? '·' : '$n',
         style: Huruf.angka(17, warna: penuh ? Pal.latar : Pal.kapur),
+      ),
+    );
+  }
+}
+
+
+class _BarisSubjek extends StatelessWidget {
+  const _BarisSubjek({required this.rencana, required this.profil, required this.onTap});
+
+  final RencanaSesi rencana;
+  final ProfilSubjek? profil;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = profil;
+    final tamat = rencana.tamat;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Pal.garis))),
+        child: Row(
+          children: [
+            SizedBox(width: 58, child: Text(rencana.subjek, style: Huruf.angka(24))),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      for (final l in rencana.langkah)
+                        Expanded(
+                          child: Container(
+                            height: 6,
+                            margin: const EdgeInsets.only(right: 2),
+                            color: l.selesai
+                                ? Pal.kelas(int.parse(l.kelas.split('-').last))
+                                : (l.dilewati ? Pal.garisKuat : Pal.lapis2),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (p != null) '${p.jenisKelamin} · ${p.usia} · ${ProfilSubjek.tingkatPengalaman[p.pengalaman]}',
+                      if (p == null) 'Profil tidak ditemukan',
+                    ].join(),
+                    style: Huruf.label(ukuran: 10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            tamat
+                ? const Lencana('Selesai', warna: Pal.benar)
+                : Text('${rencana.jumlahTuntas}/${rencana.langkah.length}', style: Huruf.angka(22, warna: Pal.sinyal)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ringkasan kesiapan dataset untuk skripsi: demografi, keseimbangan kelas,
+/// dan hal yang perlu dibereskan sebelum pelatihan.
+class _Kesehatan extends StatelessWidget {
+  const _Kesehatan({required this.rekaman, required this.profil});
+
+  final List<InfoRekaman> rekaman;
+  final List<ProfilSubjek> profil;
+
+  @override
+  Widget build(BuildContext context) {
+    final asli = rekaman.where((r) => r.subjek != 'CONTOH').toList();
+    final subjekRekaman = {for (final r in asli) r.subjek};
+    final kodeProfil = {for (final p in profil) p.kode};
+    final tanpaProfil = subjekRekaman.difference(kodeProfil).toList()..sort();
+
+    final peringatan = <String>[
+      if (rekaman.any((r) => r.subjek == 'CONTOH')) 'Rekaman CONTOH masih ada. Hapus sebelum mengekspor data asli.',
+      if (tanpaProfil.isNotEmpty) 'Tanpa profil/persetujuan: ${tanpaProfil.join(', ')}. Direkam lewat set manual.',
+      if (subjekRekaman.length < 10) 'Baru ${subjekRekaman.length} subjek. Validasi silang 5-fold per subjek butuh minimal 10, idealnya 15–20.',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final g in semuaGerakan) _Keseimbangan(gerakan: g, rekaman: asli),
+        const SizedBox(height: 6),
+        if (profil.isNotEmpty) _Demografi(profil: profil),
+        for (final p in peringatan)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.warning_amber_rounded, size: 16, color: Pal.sinyal),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(p, style: Huruf.teks(warna: Pal.redup, ukuran: 13))),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _Keseimbangan extends StatelessWidget {
+  const _Keseimbangan({required this.gerakan, required this.rekaman});
+
+  final Gerakan gerakan;
+  final List<InfoRekaman> rekaman;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = {for (final k in gerakan.kode) k: 0};
+    for (final r in rekaman.where((r) => r.gerakan == gerakan.id)) {
+      r.sebaranLabel.forEach((k, v) => n[k] = (n[k] ?? 0) + v);
+    }
+    final total = n.values.fold(0, (a, b) => a + b);
+    final maks = n.values.fold(1, (a, b) => a > b ? a : b);
+    final min = n.values.fold(maks, (a, b) => a < b ? a : b);
+    final timpang = total > 0 && min < maks * 0.7;
+    if (total == 0) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            Label(gerakan.nama),
+            const Spacer(),
+            Text('BELUM ADA DATA', style: Huruf.label(warna: Pal.samar, ukuran: 10)),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Label(gerakan.nama),
+              const Spacer(),
+              if (timpang) const Lencana('Timpang', warna: Pal.sinyal),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (var i = 0; i < gerakan.kelas.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  SizedBox(width: 48, child: Text(gerakan.kelas[i].kode, style: Huruf.label(ukuran: 10))),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (_, c) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          height: 12,
+                          width: c.maxWidth * (n[gerakan.kelas[i].kode]! / maks),
+                          color: Pal.kelas(i),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: Text('${n[gerakan.kelas[i].kode]}', textAlign: TextAlign.right, style: Huruf.angka(17)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Demografi extends StatelessWidget {
+  const _Demografi({required this.profil});
+
+  final List<ProfilSubjek> profil;
+
+  @override
+  Widget build(BuildContext context) {
+    int hitung(bool Function(ProfilSubjek) f) => profil.where(f).length;
+    final tinggi = [for (final p in profil) if (p.tinggiCm != null) p.tinggiCm!];
+    final usia = {for (final u in ProfilSubjek.rentangUsia) u: hitung((p) => p.usia == u)}
+      ..removeWhere((_, v) => v == 0);
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Label('Karakteristik subjek'),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: Bacaan(label: 'Subjek', nilai: '${profil.length}')),
+              Expanded(child: Bacaan(label: 'L / P', nilai: '${hitung((p) => p.jenisKelamin == 'L')}/${hitung((p) => p.jenisKelamin == 'P')}')),
+              Expanded(
+                child: Bacaan(
+                  label: 'Tinggi',
+                  nilai: tinggi.isEmpty ? '—' : '${tinggi.reduce((a, b) => a < b ? a : b)}–${tinggi.reduce((a, b) => a > b ? a : b)}',
+                  satuan: tinggi.isEmpty ? null : 'cm',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Usia ${usia.entries.map((e) => '${e.key}: ${e.value}').join(' · ')}  ·  '
+            '${ProfilSubjek.tingkatPengalaman.entries.map((e) => '${e.value} ${hitung((p) => p.pengalaman == e.key)}').join(' · ')}',
+            style: Huruf.teks(warna: Pal.redup, ukuran: 12.5),
+          ),
+        ],
       ),
     );
   }

@@ -22,6 +22,9 @@ import 'ringkasan.dart';
 
 enum ModeLatihan { latihan, demo, rekam }
 
+/// Hasil mode rekam yang dikembalikan lewat Navigator.pop.
+typedef HasilRekam = ({String path, int repetisi});
+
 enum _Fase { posisi, hitungMundur, aktif, istirahat }
 
 /// Layar kamera: cek posisi, hitung mundur, set latihan, dan istirahat.
@@ -35,6 +38,7 @@ class LayarLatihan extends StatefulWidget {
     required this.mode,
     this.subjek,
     this.kelasRekam,
+    this.targetRekam,
     this.catatan = '',
   });
 
@@ -44,6 +48,9 @@ class LayarLatihan extends StatefulWidget {
   /// Diisi di mode rekam.
   final String? subjek;
   final Kelas? kelasRekam;
+
+  /// Mode rekam terpandu: rekaman berhenti sendiri setelah sekian repetisi.
+  final int? targetRekam;
   final String catatan;
 
   @override
@@ -206,7 +213,17 @@ class _LayarLatihanState extends State<LayarLatihan> {
     } else {
       _ucap('$angka. ${g.kelas[h.kelas].ucapan}');
     }
-    if (_rekam) return;
+    if (_rekam) {
+      final t = widget.targetRekam;
+      if (t != null && h.nomor >= t) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (!mounted || _selesai) return;
+          _ucap('Selesai');
+          _akhiri();
+        });
+      }
+      return;
+    }
     if (_mesin!.jumlahSetIni >= _target) {
       if (_set < _jumlahSet) {
         Future.delayed(const Duration(milliseconds: 1400), () {
@@ -317,8 +334,9 @@ class _LayarLatihanState extends State<LayarLatihan> {
         ],
       ),
     );
+    HasilRekam? hasil;
     if (jumlah != null && jumlah >= 0) {
-      await Rekaman.simpan(
+      final path = await Rekaman.simpan(
         subjek: widget.subjek!,
         gerakan: g.id,
         label: widget.kelasRekam!.kode,
@@ -329,6 +347,7 @@ class _LayarLatihanState extends State<LayarLatihan> {
         kamera: Pengaturan.instance.kameraDepan ? 'depan' : 'belakang',
         catatan: widget.catatan,
       );
+      hasil = (path: path, repetisi: jumlah);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -339,7 +358,7 @@ class _LayarLatihanState extends State<LayarLatihan> {
         );
       }
     }
-    if (mounted) Navigator.of(context).pop(jumlah != null && jumlah >= 0);
+    if (mounted) Navigator.of(context).pop(hasil);
   }
 
   @override

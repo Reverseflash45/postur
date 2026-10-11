@@ -39,8 +39,15 @@ app/   Flutter (Android): latihan per set, mode demo, rekam & tinjau data, uji k
   PNG untuk dibagikan. Dengan *Bandingkan semua model* aktif, setiap repetisi
   juga dinilai model lain dan kesepakatannya ditampilkan.
 - **Progres**: repetisi 14 hari, tren skor, rekor, riwayat.
-- **Lab**: rekam data, tinjau dan label ulang tiap repetisi, uji kinerja, info
-  model, panduan, pengaturan.
+- **Lab**: sesi pengambilan data terpandu, rekam set manual, tinjau dan label
+  ulang tiap repetisi, uji kinerja, info model, panduan, pengaturan.
+- **Sesi terpandu** (Lab → Rekam data → *Subjek baru*): lembar informasi dan
+  persetujuan, profil subjek anonim, urutan kelas seimbang per subjek
+  (bujur sangkar latin Williams), instruksi suara tiap set, rekaman yang
+  berhenti sendiri saat target repetisi tercapai, istirahat berwaktu,
+  pengingat posisi ponsel saat ganti gerakan, rekam ulang, dan hapus data
+  bila subjek mengundurkan diri. Panel *Kesehatan dataset* menampilkan
+  keseimbangan kelas, karakteristik subjek, dan peringatan sebelum ekspor.
 
 Logika fitur dan segmentasi ditulis dua kali (Python untuk pelatihan, Dart
 untuk aplikasi). `app/test/paritas_test.dart` memastikan keduanya menghasilkan
@@ -48,10 +55,12 @@ angka yang sama dengan berkas uji dari Python, sampai ±1e-8.
 
 ## Alur penelitian
 
-1. **Rekam data** di aplikasi (menu *Rekam data*): isi kode subjek, pilih
-   kelas, subjek melakukan 10 repetisi, isi hitungan manual, simpan. Data
-   latih berasal dari pose estimator yang sama dengan yang dipakai saat
-   aplikasi berjalan.
+1. **Rekam data** di aplikasi lewat sesi terpandu, mengikuti
+   [protokol pengambilan data](docs/protokol-pengambilan-data.md). Cetak
+   [formulir persetujuan](docs/formulir-persetujuan.docx) dan
+   [lembar observasi](docs/lembar-observasi.docx) untuk tiap subjek (teksnya
+   bisa diubah di `docs/buat_formulir.py`). Data latih berasal dari pose
+   estimator yang sama dengan yang dipakai saat aplikasi berjalan.
 2. **Ekspor** semua rekaman (.zip) dari aplikasi ke laptop, lalu ekstrak ke
    `ml/data/rekaman/`.
 3. **Tinjau** tiap rekaman di aplikasi (ketuk sesi di *Rekam data*): putar
@@ -69,9 +78,11 @@ angka yang sama dengan berkas uji dari Python, sampai ±1e-8.
    .venv/Scripts/python -m postur latih --data data/rekaman --anotasi data/anotasi.csv --keluar hasil
    ```
    Hasilnya di `hasil/<gerakan>/`:
-   - `laporan.md` dan `metrik.json`: macro-F1, per kelas, McNemar, kuantisasi,
-     penghitungan repetisi, F1 per subjek, fitur terpenting RF, kurva belajar
-   - `tabel.tex`: tabel booktabs siap tempel ke Bab IV
+   - `laporan.md` dan `metrik.json`: karakteristik subjek, macro-F1, per kelas,
+     McNemar, kuantisasi, penghitungan repetisi, F1 per subjek, fitur
+     terpenting RF, kurva belajar
+   - `tabel.tex`: tabel booktabs siap tempel ke Bab IV, termasuk tabel
+     karakteristik subjek bila profil subjek ikut diekspor
    - PNG: confusion matrix tiap model, F1 per subjek, fitur penting, kurva belajar
 
    Kurva belajar bisa dilewati dengan `--tanpa-kurva`.

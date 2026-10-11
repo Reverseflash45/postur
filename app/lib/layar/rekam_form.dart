@@ -30,7 +30,7 @@ class _LayarRekamFormState extends State<LayarRekamForm> {
   Future<void> _mulai() async {
     final subjek = _subjek.text.trim().toUpperCase();
     Pengaturan.instance.subjekTerakhir = subjek;
-    final tersimpan = await Navigator.of(context).push<bool>(
+    final tersimpan = await Navigator.of(context).push<HasilRekam>(
       MaterialPageRoute(
         builder: (_) => LayarLatihan(
           gerakan: _g,
@@ -43,7 +43,7 @@ class _LayarRekamFormState extends State<LayarRekamForm> {
     );
     // Setelah satu set tersimpan, pilih kelas berikutnya supaya sesi
     // perekaman satu subjek bisa berjalan tanpa banyak ketukan.
-    if (tersimpan == true && mounted) {
+    if (tersimpan != null && mounted) {
       final i = _g.kelas.indexOf(_kelas);
       if (i < _g.kelas.length - 1) setState(() => _kelas = _g.kelas[i + 1]);
     }

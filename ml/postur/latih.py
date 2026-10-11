@@ -16,6 +16,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precisio
 from sklearn.model_selection import GroupKFold
 
 from . import analisis, saraf
+from . import subjek as profil_subjek
 from .augmentasi import perbanyak
 from .aturan import KlasifikasiAturan
 from .data import Repetisi, larik, muat_dataset
@@ -189,6 +190,9 @@ def eksperimen(folder: Path, id_gerakan: str, keluar: Path, k: int = 5, aug: int
         kb = analisis.kurva_belajar(reps, g, k, aug, benih)
         analisis.gambar_kurva(kb, f"{g.nama} – kurva belajar", out / "kurva_belajar.png")
 
+    profil = profil_subjek.muat_profil(folder)
+    karakteristik = profil_subjek.ringkas(profil, {str(x) for x in subjek}) if profil else None
+
     metrik = {
         "gerakan": g.id, "dibuat": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sumber_pose": sumber, "n_sesi": len(sesi), "n_repetisi": len(reps),
@@ -197,11 +201,15 @@ def eksperimen(folder: Path, id_gerakan: str, keluar: Path, k: int = 5, aug: int
         "hitung_repetisi": hitung, "model": hasil_model, "mcnemar": mcnemar,
         "ambang_aturan_per_fold": ambang_fold, "f1_per_subjek": per_subjek,
         "fitur_penting": penting, "kurva_belajar": kb,
+        "karakteristik_subjek": karakteristik,
         "durasi_detik": round(time.time() - t_mulai, 1),
     }
     (out / "metrik.json").write_text(json.dumps(metrik, indent=2), encoding="utf-8")
     (out / "laporan.md").write_text(tulis_laporan(metrik, g), encoding="utf-8")
-    (out / "tabel.tex").write_text(analisis.tulis_latex(metrik, g, NAMA_MODEL), encoding="utf-8")
+    tex = analisis.tulis_latex(metrik, g, NAMA_MODEL)
+    if karakteristik:
+        tex += "\n" + profil_subjek.tabel_latex(karakteristik)
+    (out / "tabel.tex").write_text(tex, encoding="utf-8")
     print(f"  laporan: {out / 'laporan.md'}")
 
     if ekspor:
@@ -220,7 +228,10 @@ def tulis_laporan(m: dict, g: Gerakan) -> str:
           f"- Data: {m['n_sesi']} sesi, {m['n_repetisi']} repetisi, {m['n_subjek']} subjek "
           f"(sumber pose: {', '.join(m['sumber_pose'])})",
           f"- Validasi: {m['k_fold']}-fold GroupKFold per subjek, augmentasi {m['augmentasi']}× per repetisi latih",
-          "", "## Jumlah repetisi per kelas", "", "| Kelas | Nama | n |", "|---|---|---|"]
+          ""]
+    if m.get("karakteristik_subjek"):
+        b += ["## Karakteristik subjek", "", *profil_subjek.tabel_markdown(m["karakteristik_subjek"]), ""]
+    b += ["## Jumlah repetisi per kelas", "", "| Kelas | Nama | n |", "|---|---|---|"]
     for k in g.kelas:
         b.append(f"| {k.kode} | {k.nama} | {m['per_kelas_n'][k.kode]} |")
 

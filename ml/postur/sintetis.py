@@ -309,3 +309,21 @@ def bangkitkan(n_subjek: int = 20, benih: int = 7, gerakan=(SQUAT, PUSHUP),
                 for nomor in range(set_per_kelas):
                     hasil.append(buat_sesi(g, label, s, rng, int(rng.integers(8, 13)), nomor))
     return hasil
+
+
+def profil_acak(n_subjek: int = 20, benih: int = 7) -> list[dict]:
+    """Profil subjek sintetis (format postur-subjek) untuk menguji tabel
+    karakteristik. RNG terpisah supaya sesi yang dibangkitkan tidak berubah."""
+    rng = np.random.default_rng(benih + 1000)
+    hasil = []
+    for k in range(n_subjek):
+        jk = str(rng.choice(["L", "P"]))
+        tinggi = int(rng.normal(168 if jk == "L" else 156, 6))
+        hasil.append({
+            "format": "postur-subjek", "versi": 1, "kode": f"X{k + 1:02d}",
+            "usia": str(rng.choice(["18-24", "25-34", "35-44"], p=[0.6, 0.3, 0.1])),
+            "jenis_kelamin": jk, "pengalaman": str(rng.choice(["pemula", "kadang", "rutin"])),
+            "tinggi_cm": tinggi, "persetujuan": True, "sintetis": True,
+            "dibuat": "2026-01-01T00:00:00",
+        })
+    return hasil

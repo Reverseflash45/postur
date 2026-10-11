@@ -154,3 +154,29 @@ def test_analisis_f1_per_subjek_dan_latex():
          "mcnemar": {}, "hitung_repetisi": {"n_set": 0}}
     tex = tulis_latex(m, SQUAT, {"rf": "Random Forest"})
     assert "\\toprule" in tex and "0.800" in tex
+
+
+def test_profil_subjek_ringkasan_dan_latex(tmp_path):
+    from postur import subjek as ps
+    from postur.sintetis import profil_acak
+
+    for p in profil_acak(6, benih=1):
+        (tmp_path / f"subjek-{p['kode']}.json").write_text(json.dumps(p), encoding="utf-8")
+    # Berkas sesi atau JSON lain di folder yang sama tidak ikut terbaca.
+    (tmp_path / "lain.json").write_text(json.dumps({"format": "postur-sesi"}), encoding="utf-8")
+    profil = ps.muat_profil(tmp_path)
+    assert sorted(profil) == [f"X0{i}" for i in range(1, 7)]
+
+    r = ps.ringkas(profil, {"X01", "X02", "X03", "S99"})
+    assert r["n"] == 3
+    assert r["tanpa_profil"] == ["S99"]
+    assert sum(r["jenis_kelamin"].values()) == 3
+    assert sum(r["usia"].values()) == 3
+    assert r["tinggi_cm"]["n"] == 3
+
+    md = "\n".join(ps.tabel_markdown(r))
+    assert "Tanpa profil: S99" in md
+    tex = ps.tabel_latex(r)
+    assert r"\label{tab:subjek}" in tex
+    assert "\%" in tex and "%)" not in tex.replace("\%)", "")
+    assert "$\pm$" in tex
