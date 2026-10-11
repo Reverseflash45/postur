@@ -157,7 +157,8 @@ flutter build apk --release --split-per-abi
 cd app
 flutter run -d chrome            # pengembangan
 flutter build web --release      # hasil di build/web, termasuk vercel.json
-vercel deploy build/web --prod   # atau hosting statis apa pun (butuh HTTPS untuk kamera)
+cd build/web && vercel link --yes --project postur && vercel deploy --prod
+                                 # atau hosting statis apa pun (butuh HTTPS untuk kamera)
 ```
 
 ## Pembaruan berkas uji
