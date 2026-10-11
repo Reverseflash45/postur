@@ -111,10 +111,8 @@ class _LayarUjiKinerjaState extends State<LayarUjiKinerja> {
       }
       if (argmax(p) == argmax(h)) samaKelas++;
     }
-    if (id.endsWith('_int8')) {
-      return '$samaKelas/${contoh.length} kelas sama dgn f32';
-    }
-    return 'Δ maks ${selisih.toStringAsExponential(1)}';
+    if (id.endsWith('_int8')) return '$samaKelas/${contoh.length} kelas = f32';
+    return 'Δ ${selisih.toStringAsExponential(1)}';
   }
 
   /// Waktu ekstraksi fitur per repetisi, diukur pada rekaman demo.
@@ -172,109 +170,178 @@ class _LayarUjiKinerjaState extends State<LayarUjiKinerja> {
 
   @override
   Widget build(BuildContext context) {
-    final skema = Theme.of(context).colorScheme;
     final pose = Pengaturan.instance.statistikPose;
+    final maks = _hasil.fold<double>(
+      0.001,
+      (a, u) => math.max(a, u.median ?? 0),
+    );
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Uji kinerja'),
-        actions: [
-          if (_hasil.isNotEmpty && !_jalan)
-            IconButton(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: _tabel()));
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tabel disalin (format Markdown)'),
-                    ),
-                  );
-                }
-              },
-              icon: const Icon(Icons.copy_rounded),
-              tooltip: 'Salin tabel',
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            0,
+            0,
+            0,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
+          children: [
+            KepalaLayar(
+              kembali: true,
+              atas: 'Lab',
+              judul: 'Uji kinerja',
+              aksi: _hasil.isNotEmpty && !_jalan
+                  ? IconButton(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: _tabel()));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Tabel disalin (Markdown)'),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.content_copy, color: Pal.kapur),
+                      tooltip: 'Salin tabel',
+                    )
+                  : null,
             ),
-        ],
-      ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          4,
-          16,
-          32 + MediaQuery.paddingOf(context).bottom,
-        ),
-        children: [
-          SegmentedButton<String>(
-            segments: [
-              for (final g in semuaGerakan)
-                ButtonSegment(value: g.id, label: Text(g.nama)),
-            ],
-            selected: {_g.id},
-            onSelectionChanged: _jalan
-                ? null
-                : (s) => setState(() {
-                    _g = gerakanDari(s.first);
-                    _hasil = [];
-                    _msFitur = null;
-                  }),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _jalan ? null : _uji,
-            icon: _jalan
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.speed_rounded),
-            label: Text(_jalan ? 'Mengukur…' : 'Jalankan uji'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Setiap model menilai repetisi contoh $_ulang kali. Hasilnya juga dicocokkan '
-            'dengan keluaran Python untuk memastikan model di ponsel sama dengan yang dievaluasi.',
-            style: TextStyle(color: skema.onSurfaceVariant, fontSize: 12.5),
-          ),
-          if (_hasil.isNotEmpty) ...[
-            const JudulBagian('Klasifikasi per repetisi'),
-            Card(
-              clipBehavior: Clip.antiAlias,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
-                children: [for (final u in _hasil) _BarisUkur(u: u)],
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 14),
+                  SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: [
+                      for (final g in semuaGerakan)
+                        ButtonSegment(
+                          value: g.id,
+                          label: Text(g.nama.toUpperCase()),
+                        ),
+                    ],
+                    selected: {_g.id},
+                    onSelectionChanged: _jalan
+                        ? null
+                        : (s) => setState(() {
+                            _g = gerakanDari(s.first);
+                            _hasil = [];
+                            _msFitur = null;
+                          }),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _jalan ? null : _uji,
+                    child: Text(_jalan ? 'MENGUKUR…' : 'JALANKAN UJI'),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Setiap model menilai repetisi contoh $_ulang kali. Keluarannya juga dicocokkan dengan '
+                    'Python untuk memastikan model di ponsel sama dengan yang dievaluasi.',
+                    style: Huruf.teks(warna: Pal.samar, ukuran: 13),
+                  ),
+                  if (_hasil.isNotEmpty) ...[
+                    const JudulBagian('Klasifikasi per repetisi'),
+                    for (final u in _hasil) _BarisUkur(u: u, maks: maks),
+                  ],
+                  const JudulBagian('Tahap lain'),
+                  _BarisTahap(
+                    judul: 'Ekstraksi fitur',
+                    sub: 'Praproses · 38 fitur × 64 langkah · 72 ringkasan',
+                    nilai: _msFitur == null
+                        ? '—'
+                        : _msFitur!.toStringAsFixed(2),
+                  ),
+                  _BarisTahap(
+                    judul: 'Pose estimation',
+                    sub: pose == null
+                        ? 'ML Kit · diukur saat latihan dengan kamera'
+                        : 'ML Kit · sesi kamera terakhir · ${pose.fps.toStringAsFixed(1)} fps',
+                    nilai: pose == null ? '—' : pose.ms.toStringAsFixed(1),
+                  ),
+                ],
               ),
             ),
           ],
-          const JudulBagian('Tahap lain'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.functions_rounded),
-                  title: const Text('Ekstraksi fitur'),
-                  subtitle: const Text(
-                    'Praproses + 38 fitur × 64 langkah + 72 ringkasan',
-                  ),
-                  trailing: Text(
-                    _msFitur == null
-                        ? '–'
-                        : '${_msFitur!.toStringAsFixed(2)} ms',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BarisUkur extends StatelessWidget {
+  const _BarisUkur({required this.u, required this.maks});
+
+  final _Ukur u;
+  final double maks;
+
+  @override
+  Widget build(BuildContext context) {
+    final selesai = u.median != null || u.galat != null;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Pal.garis)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text(
+                  namaModel[u.id]!.toUpperCase(),
+                  style: Huruf.judul(22),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.accessibility_new_rounded),
-                  title: const Text('Pose estimation (ML Kit)'),
-                  subtitle: Text(
-                    pose == null
-                        ? 'Diukur saat latihan dengan kamera. Belum ada data.'
-                        : 'Sesi kamera terakhir · ${pose.fps.toStringAsFixed(1)} fps',
-                  ),
-                  trailing: Text(
-                    pose == null ? '–' : '${pose.ms.toStringAsFixed(1)} ms',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
+              ),
+              if (!selesai)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (u.median != null) ...[
+                Text(
+                  u.median!.toStringAsFixed(3),
+                  style: Huruf.angka(26, warna: Pal.sinyal),
                 ),
+                const SizedBox(width: 3),
+                Text('MS', style: Huruf.label(ukuran: 9)),
               ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (u.median != null)
+            LayoutBuilder(
+              builder: (context, c) => Stack(
+                children: [
+                  Container(height: 4, color: Pal.lapis2),
+                  Container(
+                    height: 4,
+                    width: c.maxWidth * (u.median! / maks).clamp(0.02, 1.0),
+                    color: Pal.sinyal,
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 6),
+          Text(
+            (u.galat ??
+                    [
+                      if (u.ukuran != null)
+                        '${(u.ukuran! / 1024).toStringAsFixed(1)} KB',
+                      if (u.p95 != null) 'P95 ${u.p95!.toStringAsFixed(3)}',
+                      if (u.msMuat != null)
+                        'MUAT ${u.msMuat!.toStringAsFixed(0)} MS',
+                      if (u.setia != null) u.setia!,
+                    ].join(' · '))
+                .toUpperCase(),
+            style: Huruf.label(
+              ukuran: 10,
+              warna: u.galat != null ? Pal.salah : Pal.redup,
             ),
           ),
         ],
@@ -283,55 +350,41 @@ class _LayarUjiKinerjaState extends State<LayarUjiKinerja> {
   }
 }
 
-class _BarisUkur extends StatelessWidget {
-  const _BarisUkur({required this.u});
+class _BarisTahap extends StatelessWidget {
+  const _BarisTahap({
+    required this.judul,
+    required this.sub,
+    required this.nilai,
+  });
 
-  final _Ukur u;
+  final String judul;
+  final String sub;
+  final String nilai;
 
   @override
   Widget build(BuildContext context) {
-    final skema = Theme.of(context).colorScheme;
-    final selesai = u.median != null || u.galat != null;
-    return ListTile(
-      title: Text(
-        namaModel[u.id]!,
-        style: const TextStyle(fontWeight: FontWeight.w700),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Pal.garis)),
       ),
-      subtitle: Text(
-        u.galat ??
-            [
-              if (u.ukuran != null)
-                '${(u.ukuran! / 1024).toStringAsFixed(1)} KB',
-              if (u.msMuat != null) 'muat ${u.msMuat!.toStringAsFixed(0)} ms',
-              if (u.setia != null) u.setia!,
-            ].join(' · '),
-        style: TextStyle(color: u.galat != null ? skema.error : null),
-      ),
-      trailing: !selesai
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : u.median == null
-          ? const Icon(Icons.error_outline)
-          : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${u.median!.toStringAsFixed(3)} ms',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: Warna.utama,
-                  ),
-                ),
-                Text(
-                  'p95 ${u.p95!.toStringAsFixed(3)}',
-                  style: TextStyle(fontSize: 11, color: skema.onSurfaceVariant),
-                ),
+                Text(judul.toUpperCase(), style: Huruf.judul(22)),
+                const SizedBox(height: 2),
+                Text(sub.toUpperCase(), style: Huruf.label(ukuran: 10)),
               ],
             ),
+          ),
+          Text(nilai, style: Huruf.angka(26)),
+          const SizedBox(width: 3),
+          Text('MS', style: Huruf.label(ukuran: 9)),
+        ],
+      ),
     );
   }
 }

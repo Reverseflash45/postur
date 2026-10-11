@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../data/pengaturan.dart';
 import '../inti/gerakan.dart';
+import '../inti/klasifikasi/klasifikasi.dart';
 import '../inti/klasifikasi/tflite.dart';
 import '../inti/paket_model.dart';
 import '../sumber/sumber_kamera.dart';
 import '../tema.dart';
-import 'beranda.dart';
+import 'bersama.dart';
 
 class LayarPengaturan extends StatelessWidget {
   const LayarPengaturan({super.key});
@@ -15,89 +16,98 @@ class LayarPengaturan extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Pengaturan.instance;
     return Scaffold(
-      appBar: AppBar(title: const Text('Pengaturan')),
-      body: ListenableBuilder(
-        listenable: p,
-        builder: (context, _) => ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            32 + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: [
-            const JudulBagian('Model penilai'),
-            Card(
-              child: Column(
-                children: [
-                  for (final g in semuaGerakan) _PilihModel(gerakan: g),
-                ],
-              ),
+      body: SafeArea(
+        bottom: false,
+        child: ListenableBuilder(
+          listenable: p,
+          builder: (context, _) => ListView(
+            padding: EdgeInsets.fromLTRB(
+              0,
+              0,
+              0,
+              32 + MediaQuery.paddingOf(context).bottom,
             ),
-            if (!tfliteTersedia)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-                child: Text(
-                  '1D-CNN dan LSTM (TFLite) hanya tersedia di aplikasi Android.',
-                  style: TextStyle(
-                    color: Theme.of(context).hintColor,
-                    fontSize: 12.5,
-                  ),
-                ),
+            children: [
+              const KepalaLayar(
+                kembali: true,
+                atas: 'Lab',
+                judul: 'Pengaturan',
               ),
-            const JudulBagian('Latihan'),
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    value: p.suara,
-                    onChanged: (v) => p.suara = v,
-                    title: const Text('Umpan balik suara'),
-                    subtitle: const Text(
-                      'Hitungan dan koreksi diucapkan setiap repetisi',
-                    ),
-                  ),
-                  SwitchListTile(
-                    value: p.kameraDepan,
-                    onChanged: kameraTersedia ? (v) => p.kameraDepan = v : null,
-                    title: const Text('Pakai kamera depan'),
-                    subtitle: const Text(
-                      'Layar terlihat, tapi kualitas gambar biasanya lebih rendah',
-                    ),
-                  ),
-                  ListTile(
-                    title: const Text('Target repetisi'),
-                    subtitle: Slider(
-                      value: p.target.toDouble(),
-                      min: 5,
-                      max: 30,
-                      divisions: 25,
-                      label: '${p.target}',
-                      onChanged: (v) => p.target = v.round(),
-                    ),
-                    trailing: Text(
-                      '${p.target}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const JudulBagian('Model penilai'),
+                    Panel(
+                      padding: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < semuaGerakan.length; i++) ...[
+                            if (i > 0) const Divider(),
+                            _PilihModel(gerakan: semuaGerakan[i]),
+                          ],
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const JudulBagian('Lanjutan'),
-            Card(
-              child: SwitchListTile(
-                value: p.infoTeknis,
-                onChanged: (v) => p.infoTeknis = v,
-                title: const Text('Tampilkan info teknis'),
-                subtitle: const Text(
-                  'Latensi pose, fitur, dan klasifikasi di layar latihan',
+                    if (!tfliteTersedia)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '1D-CNN dan LSTM (TFLite) hanya tersedia di aplikasi Android.',
+                          style: Huruf.teks(warna: Pal.samar, ukuran: 12.5),
+                        ),
+                      ),
+                    const JudulBagian('Latihan'),
+                    Panel(
+                      padding: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            value: p.suara,
+                            onChanged: (v) => p.suara = v,
+                            title: const Text('Umpan balik suara'),
+                            subtitle: const Text(
+                              'Hitungan dan koreksi diucapkan setiap repetisi',
+                            ),
+                          ),
+                          const Divider(),
+                          SwitchListTile(
+                            value: p.kameraDepan,
+                            onChanged: kameraTersedia
+                                ? (v) => p.kameraDepan = v
+                                : null,
+                            title: const Text('Pakai kamera depan'),
+                            subtitle: const Text(
+                              'Layar terlihat, tapi kualitas gambar biasanya lebih rendah',
+                            ),
+                          ),
+                          const Divider(),
+                          SwitchListTile(
+                            value: p.bandingkan,
+                            onChanged: (v) => p.bandingkan = v,
+                            title: const Text('Bandingkan semua model'),
+                            subtitle: const Text(
+                              'Setiap repetisi juga dinilai model lain; hasilnya di ringkasan',
+                            ),
+                          ),
+                          const Divider(),
+                          SwitchListTile(
+                            value: p.infoTeknis,
+                            onChanged: (v) => p.infoTeknis = v,
+                            title: const Text('Info teknis'),
+                            subtitle: const Text(
+                              'Latensi pose, fitur, dan klasifikasi di layar latihan',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -119,16 +129,15 @@ class _PilihModel extends StatelessWidget {
         final aktif = modelAktif(paket);
         final otomatis = Pengaturan.instance.model(gerakan.id) == null;
         return ListTile(
-          title: Text(
-            gerakan.nama,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          title: Text(gerakan.nama.toUpperCase(), style: Huruf.judul(22)),
           subtitle: Text(
-            otomatis
-                ? 'Otomatis: ${labelModel(paket, aktif)}'
-                : labelModel(paket, aktif),
+            (otomatis
+                    ? 'Otomatis · ${labelModel(paket, aktif)}'
+                    : labelModel(paket, aktif))
+                .toUpperCase(),
+            style: Huruf.label(),
           ),
-          trailing: const Icon(Icons.expand_more_rounded),
+          trailing: const Icon(Icons.unfold_more, color: Pal.samar),
           onTap: () => showModalBottomSheet(
             context: context,
             showDragHandle: true,
@@ -145,18 +154,15 @@ class _PilihModel extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                       child: Text(
-                        'Model untuk ${gerakan.nama.toLowerCase()}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        'MODEL ${gerakan.nama.toUpperCase()}',
+                        style: Huruf.angka(30),
                       ),
                     ),
                     RadioListTile<String>(
                       value: '',
                       title: const Text('Otomatis'),
                       subtitle: Text(
-                        'Pakai F1 validasi tertinggi (${labelModel(paket, paket.terbaik)})',
+                        'F1 validasi tertinggi · ${namaModel[paket.terbaik]}',
                       ),
                     ),
                     for (final id in paket.tersedia)

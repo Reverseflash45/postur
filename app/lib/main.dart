@@ -3,7 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'data/pengaturan.dart';
-import 'layar/beranda.dart';
+import 'layar/utama.dart';
 import 'tema.dart';
 
 Future<void> main() async {
@@ -21,8 +21,8 @@ class AplikasiPostur extends StatelessWidget {
     return MaterialApp(
       title: 'Postur',
       debugShowCheckedModeBanner: false,
-      theme: buatTema(Brightness.light),
-      darkTheme: buatTema(Brightness.dark),
+      theme: buatTema(),
+      themeMode: ThemeMode.dark,
       locale: const Locale('id'),
       supportedLocales: const [Locale('id'), Locale('en')],
       localizationsDelegates: const [
@@ -30,7 +30,7 @@ class AplikasiPostur extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const LayarBeranda(),
+      home: const LayarUtama(),
     );
   }
 }

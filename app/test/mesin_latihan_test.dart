@@ -82,4 +82,55 @@ void main() {
     expect(angkaKeKata(100), 'seratus');
     expect(angkaKeKata(112), 'seratus dua belas');
   });
+
+  test('jeda tidak mencatat repetisi; mulaiHitung memulai set baru', () {
+    final frame = _demo('squat');
+    final m = MesinLatihan(gerakan: squat, klasifikasi: _Tetap(0), aktif: false);
+    final separuh = frame.length ~/ 2;
+    for (final f in frame.take(separuh)) {
+      m.masukkan(f);
+    }
+    expect(m.jumlah, 0);
+    m.mulaiHitung(set: 2);
+    for (final f in frame.skip(separuh)) {
+      m.masukkan(f);
+    }
+    expect(m.jumlah, greaterThan(0));
+    expect(m.hasil.every((h) => h.set == 2), isTrue);
+    expect(m.jumlahSetIni, m.jumlah);
+  });
+
+  test('tempo, pose putar ulang, dan pendapat model pembanding tersimpan', () {
+    final m = MesinLatihan(gerakan: squat, klasifikasi: _Tetap(0), pembanding: [_TetapLain(2)]);
+    _demo('squat').forEach(m.masukkan);
+    final h = m.hasil.first;
+    expect(h.pose.length, langkahPutar * 24);
+    expect(h.kurva.length, langkahPutar);
+    final t = h.tempo!;
+    expect(t.turun + t.naik, closeTo(h.durasi, 1e-9));
+    expect(t.turun, greaterThan(0));
+    expect(h.pendapat, {'lain': 2});
+    expect(h.skor, 100);
+    final balik = HasilRepetisi.dariJson(jsonDecode(jsonEncode(h.keJson())) as Map<String, dynamic>);
+    expect(balik.pendapat, {'lain': 2});
+    expect(balik.kurva.length, langkahPutar);
+    expect(balik.set, h.set);
+  });
+
+  test('catatan lama tanpa pose, kurva, dan pendapat tetap terbaca', () {
+    final h = HasilRepetisi.dariJson({
+      'nomor': 1, 'kelas': 1, 'peluang': [0.2, 0.8, 0, 0], 'durasi': 1.5, 'rom': 70,
+    });
+    expect(h.pose, isEmpty);
+    expect(h.tempo, isNull);
+    expect(h.pendapat, isEmpty);
+    expect(h.skor, 20);
+  });
+}
+
+class _TetapLain extends _Tetap {
+  _TetapLain(super.kelas);
+
+  @override
+  String get id => 'lain';
 }

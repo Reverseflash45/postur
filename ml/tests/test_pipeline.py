@@ -128,3 +128,29 @@ def test_augmentasi_tetap_berhingga(sesi_contoh):
     t, xy, vis = augmentasi_satu(r, np.random.default_rng(0))
     seq, ring = proses_repetisi(t, xy, vis, SQUAT)
     assert np.isfinite(seq).all() and np.isfinite(ring).all()
+
+
+def test_label_rep_dari_aplikasi_dan_prioritas_csv(sesi_contoh):
+    s = sesi_contoh["SQ-0"]
+    n = len(potong_repetisi(s, SQUAT, hitung_fitur=False))
+    s.meta["label_rep"] = ["SQ-2", None, "BUANG"] + [None] * (n - 3)
+    reps = potong_repetisi(s, SQUAT, hitung_fitur=False)
+    assert len(reps) == n - 1
+    assert reps[0].label == "SQ-2" and reps[1].label == "SQ-0"
+    assert all(r.indeks != 2 for r in reps)
+    reps = potong_repetisi(s, SQUAT, {(s.id, 0): "SQ-3"}, hitung_fitur=False)
+    assert reps[0].label == "SQ-3"
+    s.meta.pop("label_rep")
+
+
+def test_analisis_f1_per_subjek_dan_latex():
+    from postur.analisis import f1_per_subjek, tulis_latex
+    y = np.array([0, 1, 0, 1])
+    oof = {"rf": np.array([0, 1, 1, 1])}
+    per = f1_per_subjek(y, oof, np.array(["A", "A", "B", "B"]), 2)
+    assert per["rf"]["A"] == 1.0 and per["rf"]["B"] < 1.0
+    m = {"k_fold": 2, "model": {"rf": {"macro_f1_rerata": 0.8, "macro_f1_sb": 0.1, "akurasi": 0.75,
+                                       "per_kelas": {k: {"f1": 0.5} for k in SQUAT.kode}}},
+         "mcnemar": {}, "hitung_repetisi": {"n_set": 0}}
+    tex = tulis_latex(m, SQUAT, {"rf": "Random Forest"})
+    assert "\\toprule" in tex and "0.800" in tex

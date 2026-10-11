@@ -1,7 +1,7 @@
 name: postur
 description: "Deteksi kesalahan postur squat dan push-up dengan pose estimation di Android."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.3.0+3
 
 environment:
   sdk: ^3.13.5
@@ -33,3 +33,28 @@ flutter:
     - assets/model/squat/
     - assets/model/pushup/
     - assets/demo/
+  fonts:
+    - family: BarlowCondensed
+      fonts:
+        - asset: assets/font/BarlowCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/font/BarlowCondensed-Bold.ttf
+          weight: 700
+        - asset: assets/font/BarlowCondensed-ExtraBold.ttf
+          weight: 800
+    - family: Barlow
+      fonts:
+        - asset: assets/font/Barlow-Regular.ttf
+          weight: 400
+        - asset: assets/font/Barlow-Medium.ttf
+          weight: 500
+        - asset: assets/font/Barlow-SemiBold.ttf
+          weight: 600
+        - asset: assets/font/Barlow-Bold.ttf
+          weight: 700
+    - family: PlexMono
+      fonts:
+        - asset: assets/font/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/font/IBMPlexMono-Medium.ttf
+          weight: 500

@@ -21,9 +21,22 @@ kamera ──► pose (33 titik) ──► segmentasi repetisi ──► fitur 6
 ## Isi repo
 
 ```
-ml/    Python: data, fitur, segmentasi, 4 model, evaluasi GroupKFold, ekspor TFLite
-app/   Flutter (Android): latihan, mode demo, rekam data, uji kinerja, info model
+ml/    Python: data, fitur, segmentasi, 4 model, evaluasi GroupKFold, analisis Bab IV, ekspor TFLite
+app/   Flutter (Android): latihan per set, mode demo, rekam & tinjau data, uji kinerja, info model
 ```
+
+### Aplikasi
+
+- **Latih**: cek posisi (badan terlihat, jarak, diam) → hitung mundur → set dengan
+  target repetisi → istirahat berwaktu. Bagian tubuh yang salah disorot di
+  kerangka, koreksi diucapkan, pengukur sudut berubah hijau saat kedalaman tercapai.
+- **Ringkasan**: skor form (peluang kelas benar), rentang gerak tiap repetisi,
+  tempo turun/naik, temuan utama, putar ulang kerangka tiap repetisi, kartu hasil
+  PNG untuk dibagikan. Dengan *Bandingkan semua model* aktif, setiap repetisi
+  juga dinilai model lain dan kesepakatannya ditampilkan.
+- **Progres**: repetisi 14 hari, tren skor, rekor, riwayat.
+- **Lab**: rekam data, tinjau dan label ulang tiap repetisi, uji kinerja, info
+  model, panduan, pengaturan.
 
 Logika fitur dan segmentasi ditulis dua kali (Python untuk pelatihan, Dart
 untuk aplikasi). `app/test/paritas_test.dart` memastikan keduanya menghasilkan
@@ -37,19 +50,27 @@ angka yang sama dengan berkas uji dari Python, sampai ±1e-8.
    aplikasi berjalan.
 2. **Ekspor** semua rekaman (.zip) dari aplikasi ke laptop, lalu ekstrak ke
    `ml/data/rekaman/`.
-3. **Periksa** repetisi yang terdeteksi dan buat templat anotasi:
+3. **Tinjau** tiap rekaman di aplikasi (ketuk sesi di *Rekam data*): putar
+   ulang tiap repetisi, ganti labelnya, atau buang yang salah diperagakan.
+   Hasilnya tersimpan sebagai `label_rep` di berkas sesi. Alternatifnya di
+   laptop:
    ```
    cd ml
    .venv/Scripts/python -m postur periksa --data data/rekaman --csv data/anotasi.csv
    ```
-   Ubah label repetisi yang salah diperagakan, atau isi `BUANG`.
+   Prioritas label: `anotasi.csv` > `label_rep` dari aplikasi > label set.
 4. **Latih dan evaluasi** (5-fold GroupKFold per subjek, augmentasi, McNemar,
    kuantisasi int8):
    ```
    .venv/Scripts/python -m postur latih --data data/rekaman --anotasi data/anotasi.csv --keluar hasil
    ```
-   Hasilnya `hasil/<gerakan>/laporan.md`, `metrik.json`, dan confusion matrix
-   PNG. Tabel di laporan siap dipindah ke Bab IV.
+   Hasilnya di `hasil/<gerakan>/`:
+   - `laporan.md` dan `metrik.json`: macro-F1, per kelas, McNemar, kuantisasi,
+     penghitungan repetisi, F1 per subjek, fitur terpenting RF, kurva belajar
+   - `tabel.tex`: tabel booktabs siap tempel ke Bab IV
+   - PNG: confusion matrix tiap model, F1 per subjek, fitur penting, kurva belajar
+
+   Kurva belajar bisa dilewati dengan `--tanpa-kurva`.
 5. **Pasang model** ke aplikasi: salin `hasil/<gerakan>/model/*` ke
    `app/assets/model/<gerakan>/`, lalu build ulang APK.
 6. **Ukur di ponsel** lewat menu *Uji kinerja*: latensi tiap model,

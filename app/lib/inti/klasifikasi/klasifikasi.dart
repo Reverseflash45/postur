@@ -40,4 +40,14 @@ const namaModel = {
   'lstm_int8': 'LSTM int8',
 };
 
+/// Nama pendek untuk ruang sempit (strip ringkasan, riwayat).
+const namaPendek = {
+  'aturan': 'Aturan',
+  'rf': 'RF',
+  'cnn': '1D-CNN',
+  'cnn_int8': 'CNN-i8',
+  'lstm': 'LSTM',
+  'lstm_int8': 'LSTM-i8',
+};
+
 const urutanModel = ['aturan', 'rf', 'cnn', 'cnn_int8', 'lstm', 'lstm_int8'];

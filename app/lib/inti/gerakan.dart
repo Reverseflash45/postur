@@ -5,7 +5,13 @@ import 'landmark.dart';
 /// Urutan kelas = indeks keluaran model. Kalau mengubah salah satu, ubah
 /// keduanya; uji paritas akan gagal bila tidak sinkron.
 class Kelas {
-  const Kelas(this.kode, this.nama, this.arahan, this.ucapan);
+  const Kelas(
+    this.kode,
+    this.nama,
+    this.arahan,
+    this.ucapan, {
+    this.bagian = const [],
+  });
 
   final String kode;
   final String nama;
@@ -15,6 +21,9 @@ class Kelas {
 
   /// Kalimat pendek yang diucapkan setelah repetisi.
   final String ucapan;
+
+  /// Landmark yang disorot di kerangka saat kesalahan ini terdeteksi.
+  final List<int> bagian;
 
   bool get benar => kode.endsWith('-0');
 }
@@ -40,7 +49,12 @@ class Gerakan {
     required this.wajibTerlihat,
     required this.posisiKamera,
     required this.orientasi,
+    required this.targetSudut,
   });
+
+  /// Sudut sendi utama (derajat) yang dianggap sudah cukup dalam. Hanya
+  /// untuk petunjuk visual di pengukur; penilaian tetap oleh model.
+  final double targetSudut;
 
   final String id;
   final String nama;
@@ -87,18 +101,21 @@ const squat = Gerakan(
       'Kurang dalam',
       'Turun hanya setengah jalan, paha tidak sampai sejajar lantai.',
       'Turun lebih dalam',
+      bagian: [Lm.pinggulKi, Lm.pinggulKa, Lm.lututKi, Lm.lututKa],
     ),
     Kelas(
       'SQ-2',
       'Lutut masuk ke dalam',
       'Saat turun, biarkan kedua lutut bergerak saling mendekat.',
       'Dorong lutut ke luar',
+      bagian: [Lm.lututKi, Lm.lututKa, Lm.kakiKi, Lm.kakiKa],
     ),
     Kelas(
       'SQ-3',
       'Badan terlalu condong',
       'Saat turun, condongkan badan jauh ke depan.',
       'Dada lebih tegak',
+      bagian: [Lm.bahuKi, Lm.bahuKa, Lm.pinggulKi, Lm.pinggulKa],
     ),
   ],
   sendiUtama: [
@@ -121,7 +138,12 @@ const squat = Gerakan(
   ],
   posisiKamera: 'Ponsel tegak, depan-serong ±45°, jarak 2–3 m',
   orientasi: 'Tegak',
+  targetSudut: 100,
 );
+
+const _pinggul = [
+  Lm.bahuKi, Lm.bahuKa, Lm.pinggulKi, Lm.pinggulKa, Lm.lututKi, Lm.lututKa, //
+];
 
 const pushup = Gerakan(
   id: 'pushup',
@@ -138,18 +160,28 @@ const pushup = Gerakan(
       'Pinggul turun',
       'Biarkan pinggul melengkung turun di bawah garis badan.',
       'Kencangkan perut, pinggul naik sedikit',
+      bagian: _pinggul,
     ),
     Kelas(
       'PU-2',
       'Pinggul terangkat',
       'Angkat pinggul tinggi sehingga badan membentuk huruf V terbalik.',
       'Turunkan pinggul, badan lurus',
+      bagian: _pinggul,
     ),
     Kelas(
       'PU-3',
       'Kurang dalam',
       'Turunkan dada hanya setengah jalan.',
       'Turun lebih dalam',
+      bagian: [
+        Lm.bahuKi,
+        Lm.bahuKa,
+        Lm.sikuKi,
+        Lm.sikuKa,
+        Lm.tanganKi,
+        Lm.tanganKa,
+      ],
     ),
   ],
   sendiUtama: [
@@ -170,6 +202,7 @@ const pushup = Gerakan(
   ],
   posisiKamera: 'Ponsel mendatar di lantai, dari samping, jarak 2–3 m',
   orientasi: 'Mendatar',
+  targetSudut: 95,
 );
 
 const semuaGerakan = [squat, pushup];

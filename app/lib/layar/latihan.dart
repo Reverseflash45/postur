@@ -17,11 +17,14 @@ import '../sumber/sumber_pose.dart';
 import '../sumber/sumber_rekaman.dart';
 import '../tema.dart';
 import '../widget/kerangka.dart';
+import '../widget/pengukur.dart';
 import 'ringkasan.dart';
 
 enum ModeLatihan { latihan, demo, rekam }
 
-/// Layar kamera: kerangka, hitungan repetisi, dan penilaian tiap repetisi.
+enum _Fase { posisi, hitungMundur, aktif, istirahat }
+
+/// Layar kamera: cek posisi, hitung mundur, set latihan, dan istirahat.
 ///
 /// Dipakai untuk tiga keperluan: latihan biasa, demo tanpa kamera (rekaman
 /// sintetis diputar ulang), dan rekam data penelitian.
@@ -51,18 +54,27 @@ class _LayarLatihanState extends State<LayarLatihan> {
   SumberPose? _sumber;
   MesinLatihan? _mesin;
   Pengklasifikasi? _klas;
+  final List<Pengklasifikasi> _pembanding = [];
   StreamSubscription? _langganan;
   String? _galat;
   final _jam = Stopwatch();
-  Timer? _detak;
   DateTime? _mulai;
+
+  _Fase _fase = _Fase.posisi;
+  int _set = 1;
+  int _mundur = 3;
+  double? _siapSejak;
+  Timer? _pewaktu;
+  double _sisaIstirahat = 0;
+  bool _selesai = false;
 
   /// Waktu (ms, jam frame) repetisi terakhir selesai — untuk kilatan warna.
   double _tRepetisi = -1e9;
-  bool _selesai = false;
 
   Gerakan get g => widget.gerakan;
   bool get _rekam => widget.mode == ModeLatihan.rekam;
+  int get _target => Pengaturan.instance.target;
+  int get _jumlahSet => _rekam ? 1 : Pengaturan.instance.jumlahSet;
 
   @override
   void initState() {
@@ -77,15 +89,25 @@ class _LayarLatihanState extends State<LayarLatihan> {
         var id = Pengaturan.instance.model(g.id) ?? paket.terbaik;
         if (!paket.tersedia.contains(id)) id = paket.terbaik;
         _klas = await paket.buat(id);
+        if (Pengaturan.instance.bandingkan) {
+          for (final lain in paket.tersedia) {
+            if (lain != id) _pembanding.add(await paket.buat(lain));
+          }
+        }
       }
       final SumberPose sumber = widget.mode == ModeLatihan.demo
           ? await SumberRekaman.dariAset('assets/demo/${g.id}.json')
           : SumberKamera(depan: Pengaturan.instance.kameraDepan);
-      final mesin = MesinLatihan(
-        gerakan: g,
-        klasifikasi: _klas,
-        rekamSemua: _rekam,
-      )..diRepetisi = _diRepetisi;
+      final mesin =
+          MesinLatihan(
+              gerakan: g,
+              klasifikasi: _klas,
+              rekamSemua: _rekam,
+              aktif: false,
+              pembanding: _pembanding,
+            )
+            ..diRepetisi = _diRepetisi
+            ..addListener(_periksaFase);
       _langganan = sumber.aliran.listen(mesin.masukkan);
       await sumber.mulai();
       if (!mounted) {
@@ -94,10 +116,6 @@ class _LayarLatihanState extends State<LayarLatihan> {
       }
       _mulai = DateTime.now();
       _jam.start();
-      _detak = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => setState(() {}),
-      );
       try {
         await WakelockPlus.enable();
       } catch (_) {}
@@ -110,17 +128,103 @@ class _LayarLatihanState extends State<LayarLatihan> {
     }
   }
 
+  // ------------------------------------------------------------------ fase
+
+  void _periksaFase() {
+    final m = _mesin;
+    if (m == null || _fase != _Fase.posisi) return;
+    final siap = m.kesiapan == Kesiapan.siap && m.jarakPas && m.diam;
+    if (!siap) {
+      _siapSejak = null;
+    } else if (_siapSejak == null) {
+      _siapSejak = m.waktu;
+    } else if (m.waktu - _siapSejak! >= 900) {
+      _mulaiHitungMundur();
+    }
+  }
+
+  void _mulaiHitungMundur() {
+    if (_fase == _Fase.hitungMundur) return;
+    _pewaktu?.cancel();
+    setState(() {
+      _fase = _Fase.hitungMundur;
+      _mundur = 3;
+    });
+    _ucap(angkaKeKata(3));
+    HapticFeedback.selectionClick();
+    _pewaktu = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      if (_mundur > 1) {
+        setState(() => _mundur--);
+        _ucap(angkaKeKata(_mundur));
+        HapticFeedback.selectionClick();
+      } else {
+        t.cancel();
+        setState(() => _fase = _Fase.aktif);
+        _mesin?.mulaiHitung(set: _set);
+        _ucap(_rekam ? 'Rekam' : 'Mulai');
+        HapticFeedback.heavyImpact();
+      }
+    });
+  }
+
+  void _mulaiIstirahat() {
+    _mesin?.jeda();
+    _pewaktu?.cancel();
+    final total = Pengaturan.instance.istirahat.toDouble();
+    setState(() {
+      _fase = _Fase.istirahat;
+      _sisaIstirahat = total;
+    });
+    _ucap('Set ${angkaKeKata(_set)} selesai. Istirahat.');
+    _pewaktu = Timer.periodic(const Duration(milliseconds: 100), (t) {
+      if (!mounted) return;
+      setState(() => _sisaIstirahat -= 0.1);
+      if ((_sisaIstirahat - 3).abs() < 0.05) _ucap('Bersiap');
+      if (_sisaIstirahat <= 0) {
+        t.cancel();
+        _lanjutSet();
+      }
+    });
+  }
+
+  void _lanjutSet() {
+    _pewaktu?.cancel();
+    setState(() {
+      _set++;
+      _fase = _Fase.posisi;
+      _siapSejak = null;
+    });
+  }
+
   void _diRepetisi(HasilRepetisi h) {
     _tRepetisi = _mesin?.waktu ?? 0;
     HapticFeedback.mediumImpact();
-    if (!Pengaturan.instance.suara) return;
-    final angka = angkaKeKata(h.nomor);
+    final angka = angkaKeKata(_rekam ? h.nomor : _mesin!.jumlahSetIni);
     if (h.kelas <= 0) {
-      Suara.instance.ucapkan(angka);
+      _ucap(angka);
     } else {
-      Suara.instance.ucapkan('$angka. ${g.kelas[h.kelas].ucapan}');
+      _ucap('$angka. ${g.kelas[h.kelas].ucapan}');
+    }
+    if (_rekam) return;
+    if (_mesin!.jumlahSetIni >= _target) {
+      if (_set < _jumlahSet) {
+        Future.delayed(const Duration(milliseconds: 1400), () {
+          if (mounted && _fase == _Fase.aktif) _mulaiIstirahat();
+        });
+      } else {
+        Future.delayed(const Duration(milliseconds: 1600), () {
+          if (mounted) _akhiri();
+        });
+      }
     }
   }
+
+  void _ucap(String teks) {
+    if (Pengaturan.instance.suara) Suara.instance.ucapkan(teks);
+  }
+
+  // ---------------------------------------------------------------- selesai
 
   Future<void> _akhiri() async {
     if (_selesai) return;
@@ -130,6 +234,7 @@ class _LayarLatihanState extends State<LayarLatihan> {
       return;
     }
     _selesai = true;
+    _pewaktu?.cancel();
     await sumber.berhenti();
     _jam.stop();
     final msPose = sumber.msPose, fps = sumber.fps;
@@ -152,7 +257,8 @@ class _LayarLatihanState extends State<LayarLatihan> {
       model: _klas?.id ?? '-',
       mulai: _mulai ?? DateTime.now(),
       detik: _jam.elapsed.inSeconds,
-      target: Pengaturan.instance.target,
+      target: _target,
+      jumlahSet: _set,
       demo: widget.mode == ModeLatihan.demo,
       msPose: msPose,
       fps: fps,
@@ -171,19 +277,19 @@ class _LayarLatihanState extends State<LayarLatihan> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Simpan rekaman?'),
+        title: const Text('SIMPAN REKAMAN?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            Label(
               '${widget.subjek} · ${widget.kelasRekam!.kode} ${widget.kelasRekam!.nama}',
+              warna: Pal.kapur,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Text(
-              'Terhitung otomatis ${mesin.jumlah} repetisi. Isi jumlah sebenarnya '
-              '(hitungan manual) untuk evaluasi penghitung repetisi.',
-              style: Theme.of(ctx).textTheme.bodySmall,
+              'Terhitung otomatis ${mesin.jumlah} repetisi dari ${mesin.semuaFrame.length} frame. '
+              'Isi jumlah sebenarnya (hitungan manual) untuk evaluasi penghitung repetisi.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -191,9 +297,9 @@ class _LayarLatihanState extends State<LayarLatihan> {
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: Huruf.angka(32),
               decoration: const InputDecoration(
-                labelText: 'Repetisi sebenarnya',
-                border: OutlineInputBorder(),
+                labelText: 'REPETISI SEBENARNYA',
               ),
             ),
           ],
@@ -201,12 +307,12 @@ class _LayarLatihanState extends State<LayarLatihan> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, -1),
-            child: const Text('Buang'),
+            child: const Text('BUANG'),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.pop(ctx, int.tryParse(kontrol.text) ?? mesin.jumlah),
-            child: const Text('Simpan'),
+            child: const Text('SIMPAN'),
           ),
         ],
       ),
@@ -227,7 +333,7 @@ class _LayarLatihanState extends State<LayarLatihan> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Rekaman ${widget.kelasRekam!.kode} disimpan ($jumlah repetisi)',
+              'Rekaman ${widget.kelasRekam!.kode} disimpan · $jumlah repetisi',
             ),
           ),
         );
@@ -238,7 +344,7 @@ class _LayarLatihanState extends State<LayarLatihan> {
 
   @override
   void dispose() {
-    _detak?.cancel();
+    _pewaktu?.cancel();
     _langganan?.cancel();
     _sumber?.dispose();
     _mesin?.dispose();
@@ -248,6 +354,8 @@ class _LayarLatihanState extends State<LayarLatihan> {
     } catch (_) {}
     super.dispose();
   }
+
+  // ------------------------------------------------------------------ tampil
 
   @override
   Widget build(BuildContext context) {
@@ -259,13 +367,11 @@ class _LayarLatihanState extends State<LayarLatihan> {
           if (!sudah) _akhiri();
         },
         child: Scaffold(
-          backgroundColor: Warna.malam,
+          backgroundColor: Pal.latar,
           body: _galat != null
               ? _Galat(pesan: _galat!)
               : _mesin == null
-              ? const Center(
-                  child: CircularProgressIndicator(color: Warna.kerangka),
-                )
+              ? const Center(child: CircularProgressIndicator())
               : ListenableBuilder(
                   listenable: _mesin!,
                   builder: (context, _) => _isi(context, _mesin!),
@@ -278,15 +384,18 @@ class _LayarLatihanState extends State<LayarLatihan> {
   Widget _isi(BuildContext context, MesinLatihan m) {
     final f = m.terakhir;
     final terakhir = m.hasil.isEmpty ? null : m.hasil.last;
-    final baru = f != null && m.waktu - _tRepetisi < 1400;
-    final warna = !baru || terakhir == null || terakhir.kelas < 0
-        ? Warna.kerangka
-        : (terakhir.benar ? Warna.benar : Warna.salah);
+    final baru = terakhir != null && m.waktu - _tRepetisi < 1600;
     final sumber = _sumber!;
     final pratinjau = sumber.pratinjau();
-    final mendatar =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    final mq = MediaQuery.of(context);
+    final mendatar = mq.orientation == Orientation.landscape;
+    final cukupDalam =
+        m.sudut != null && m.sudut! <= g.targetSudut && _fase == _Fase.aktif;
 
+    final kelasBaru = baru && terakhir.kelas > 0 ? terakhir.kelas : 0;
+    final warnaTulang = (baru && terakhir.kelas == 0) || cukupDalam
+        ? Pal.benar
+        : Pal.kapur.withValues(alpha: 0.92);
     final adegan = f == null
         ? (pratinjau == null
               ? const SizedBox.expand()
@@ -304,9 +413,13 @@ class _LayarLatihanState extends State<LayarLatihan> {
                   CustomPaint(
                     painter: KerangkaPainter(
                       f,
-                      warna: warna,
+                      warna: warnaTulang,
                       cermin: sumber.cermin,
-                      sorot: [for (final s in g.sendiUtama) s[1]],
+                      sendiUtama: [for (final s in g.sendiUtama) s[1]],
+                      sorot: kelasBaru > 0
+                          ? g.kelas[kelasBaru].bagian
+                          : const [],
+                      warnaSorot: Pal.kelas(kelasBaru),
                     ),
                   ),
                 ],
@@ -314,41 +427,32 @@ class _LayarLatihanState extends State<LayarLatihan> {
             ),
           );
 
-    final panel = _PanelBawah(
-      mesin: m,
-      gerakan: g,
-      rekam: _rekam,
-      target: Pengaturan.instance.target,
-      detik: _jam.elapsed.inSeconds,
-      onSelesai: _akhiri,
-      sorotTerakhir: baru,
-    );
-
-    // Di mode demo tidak ada gambar kamera: kerangka diletakkan di atas panel
-    // bawah supaya kakinya tidak tertutup.
-    final ruangPanel = pratinjau == null && !mendatar ? 230.0 : 0.0;
+    final ruangBawah = pratinjau == null && !mendatar ? 250.0 : 0.0;
+    final atasPita = mq.padding.top + 74;
 
     return Stack(
       children: [
         if (pratinjau == null) const Positioned.fill(child: _LantaiDemo()),
         Positioned.fill(
-          top: pratinjau == null ? MediaQuery.of(context).padding.top + 64 : 0,
-          bottom: ruangPanel,
-          right: mendatar && pratinjau == null ? 340 : 0,
+          top: pratinjau == null ? mq.padding.top + 70 : 0,
+          bottom: ruangBawah,
+          // Di demo, sisakan ruang untuk pengukur sudut di kanan.
+          right: pratinjau == null ? (mendatar ? 330 : 96) : 0,
           child: adegan,
         ),
-        // Gradasi supaya teks putih tetap terbaca di atas gambar kamera.
         const Positioned(
           left: 0,
           right: 0,
           top: 0,
-          height: 140,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xAA000000), Color(0x00000000)],
+          height: 150,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xCC000000), Color(0x00000000)],
+                ),
               ),
             ),
           ),
@@ -359,195 +463,679 @@ class _LayarLatihanState extends State<LayarLatihan> {
           top: 0,
           child: SafeArea(
             bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
-              child: _BarAtas(
-                judul: g.nama,
-                mode: widget.mode,
-                model: _klas == null ? null : namaModel[_klas!.id],
-                label: widget.kelasRekam,
-                onTutup: _akhiri,
-              ),
+            child: _BarAtas(
+              gerakan: g,
+              mode: widget.mode,
+              keterangan: _rekam
+                  ? '${widget.subjek} · ${widget.kelasRekam!.kode} ${widget.kelasRekam!.nama}'
+                  : 'Set $_set/$_jumlahSet · ${namaModel[_klas?.id] ?? '-'}',
+              onTutup: _akhiri,
             ),
           ),
         ),
         if (sumber.galat != null)
           Positioned(
-            left: 24,
-            right: 24,
-            top: MediaQuery.of(context).padding.top + 72,
-            child: _Pesan(teks: 'Deteksi pose gagal', petunjuk: sumber.galat!),
+            left: 16,
+            right: mendatar ? 450 : 16,
+            top: atasPita,
+            child: _Pita(
+              teks: 'Deteksi pose gagal',
+              sub: sumber.galat!,
+              warna: Pal.salah,
+            ),
           )
-        else if (m.kesiapan != Kesiapan.siap)
+        else if (_fase == _Fase.aktif && baru && terakhir.kelas > 0)
           Positioned(
-            left: 24,
-            right: 24,
-            top: MediaQuery.of(context).padding.top + 72,
-            child: _Pesan(teks: m.kesiapan.pesan, petunjuk: g.posisiKamera),
+            left: 16,
+            right: mendatar ? 450 : 16,
+            top: atasPita,
+            child: _Pita(
+              teks: g.kelas[terakhir.kelas].nama,
+              sub: g.kelas[terakhir.kelas].ucapan,
+              warna: Pal.kelas(terakhir.kelas),
+            ),
+          )
+        else if (_fase == _Fase.aktif && m.kesiapan != Kesiapan.siap)
+          Positioned(
+            left: 16,
+            right: mendatar ? 450 : 16,
+            top: atasPita,
+            child: _Pita(
+              teks: m.kesiapan.pesan,
+              sub: g.posisiKamera,
+              warna: Pal.sinyal,
+            ),
           ),
         if (Pengaturan.instance.infoTeknis)
           Positioned(
             left: 16,
-            top: MediaQuery.of(context).padding.top + 64,
+            top: mq.padding.top + 150,
             child: _InfoTeknis(sumber: sumber, mesin: m),
           ),
-        if (mendatar)
+        if (_fase == _Fase.aktif || _fase == _Fase.posisi)
           Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 340,
-            child: SafeArea(
-              left: false,
-              child: Center(child: SingleChildScrollView(child: panel)),
+            right: mendatar ? 346 : 12,
+            top: mendatar ? mq.padding.top + 70 : mq.size.height * 0.2,
+            // Latar gelap supaya skala tetap terbaca di atas gambar kamera yang terang.
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+              decoration: BoxDecoration(
+                color: const Color(0xB30C0E0F),
+                border: Border.all(color: Colors.white12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: PengukurSudut(
+                sudut: m.sudut,
+                target: g.targetSudut,
+                label: g.namaSudut.toUpperCase(),
+                tinggi: mendatar ? mq.size.height * 0.4 : mq.size.height * 0.24,
+              ),
             ),
-          )
-        else ...[
-          Positioned(
-            right: 14,
-            top: MediaQuery.of(context).size.height * 0.24,
-            child: _PengukurSudut(mesin: m, gerakan: g),
           ),
+        if (_fase == _Fase.hitungMundur)
+          Positioned.fill(child: _HitungMundur(angka: _mundur)),
+        if (_fase == _Fase.istirahat)
+          Positioned.fill(
+            child: _Istirahat(
+              sisa: _sisaIstirahat,
+              total: Pengaturan.instance.istirahat.toDouble(),
+              setBerikut: _set + 1,
+              jumlahSet: _jumlahSet,
+              mesin: m,
+              setSelesai: _set,
+              onLewati: _lanjutSet,
+              onAkhiri: _akhiri,
+            ),
+          ),
+        if (_fase == _Fase.posisi || _fase == _Fase.aktif)
           Positioned(
-            left: 0,
+            left: mendatar ? null : 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(top: false, child: panel),
+            top: mendatar ? 0 : null,
+            width: mendatar ? 330 : null,
+            child: SafeArea(
+              top: mendatar,
+              left: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: _fase == _Fase.posisi
+                    ? _PanelPosisi(
+                        mesin: m,
+                        gerakan: g,
+                        onMulai: _mulaiHitungMundur,
+                        set: _set,
+                      )
+                    : _PanelAktif(
+                        mesin: m,
+                        gerakan: g,
+                        rekam: _rekam,
+                        target: _target,
+                        detik: _jam.elapsed.inSeconds,
+                        sorot: baru,
+                        onAkhiri: _akhiri,
+                      ),
+              ),
+            ),
           ),
-        ],
       ],
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Bagian layar
+// ---------------------------------------------------------------------------
+
 class _BarAtas extends StatelessWidget {
   const _BarAtas({
-    required this.judul,
+    required this.gerakan,
     required this.mode,
-    required this.model,
-    required this.label,
+    required this.keterangan,
     required this.onTutup,
   });
 
-  final String judul;
+  final Gerakan gerakan;
   final ModeLatihan mode;
-  final String? model;
-  final Kelas? label;
+  final String keterangan;
   final VoidCallback onTutup;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          onPressed: onTutup,
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
-          tooltip: 'Selesai',
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                judul,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              Text(
-                switch (mode) {
-                  ModeLatihan.rekam =>
-                    'Rekam data · ${label!.kode} ${label!.nama}',
-                  _ => 'Model: ${model ?? '-'}',
-                },
-                style: const TextStyle(color: Colors.white70, fontSize: 12.5),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 14, 0),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onTutup,
+            icon: const Icon(Icons.close, color: Pal.kapur),
+            tooltip: 'Akhiri',
           ),
-        ),
-        if (mode == ModeLatihan.demo)
-          const _Lencana(teks: 'DEMO', warna: Warna.utama),
-        if (mode == ModeLatihan.rekam)
-          const _Lencana(teks: '● REC', warna: Warna.rekam),
-      ],
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(gerakan.nama.toUpperCase(), style: Huruf.angka(26)),
+                const SizedBox(height: 2),
+                Text(
+                  keterangan.toUpperCase(),
+                  style: Huruf.label(warna: Colors.white70, ukuran: 10.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (mode == ModeLatihan.demo) const Lencana('Demo', isi: true),
+          if (mode == ModeLatihan.rekam)
+            const Lencana('● Rec', warna: Pal.rekam, isi: true),
+        ],
+      ),
     );
   }
 }
 
-class _Lencana extends StatelessWidget {
-  const _Lencana({required this.teks, required this.warna});
+/// Pita pesan di bawah bar atas: kesalahan terakhir atau masalah posisi.
+class _Pita extends StatelessWidget {
+  const _Pita({required this.teks, required this.sub, required this.warna});
 
   final String teks;
+  final String sub;
   final Color warna;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: warna,
-        borderRadius: BorderRadius.circular(99),
+        color: const Color(0xE6101315),
+        border: Border.all(color: warna.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        teks,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 11.5,
-          letterSpacing: 0.8,
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 5, color: warna),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      teks.toUpperCase(),
+                      style: Huruf.judul(21, warna: warna),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: Huruf.teks(warna: Colors.white70, ukuran: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Pesan extends StatelessWidget {
-  const _Pesan({required this.teks, required this.petunjuk});
+class _PanelPosisi extends StatelessWidget {
+  const _PanelPosisi({
+    required this.mesin,
+    required this.gerakan,
+    required this.onMulai,
+    required this.set,
+  });
 
-  final String teks;
-  final String petunjuk;
+  final MesinLatihan mesin;
+  final Gerakan gerakan;
+  final VoidCallback onMulai;
+  final int set;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
+    final terlihat = mesin.kesiapan == Kesiapan.siap;
+    final p = mesin.proporsi;
+    final jarak = mesin.jarakPas;
+    final diam = mesin.diam;
+    String ketJarak() {
+      if (p == null) return 'Menunggu badan terdeteksi';
+      if (p < 0.3) return 'Terlalu jauh, majukan ponsel';
+      if (p > 0.95) return 'Terlalu dekat, mundurkan ponsel';
+      return 'Badan mengisi ${(p * 100).round()}% bingkai';
+    }
+
+    return _Kaca(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  set > 1 ? 'KEMBALI KE POSISI' : 'SIAPKAN POSISI',
+                  style: Huruf.angka(30),
+                ),
+              ),
+              Label('Ponsel ${gerakan.orientasi}', warna: Colors.white60),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            gerakan.posisiKamera,
+            style: Huruf.teks(warna: Colors.white60, ukuran: 13),
+          ),
+          const SizedBox(height: 14),
+          _Cek(
+            ok: terlihat,
+            judul: 'Seluruh badan terlihat',
+            sub: terlihat
+                ? 'Bahu sampai kaki terdeteksi'
+                : mesin.kesiapan.pesan,
+          ),
+          _Cek(ok: jarak, judul: 'Jarak kamera pas', sub: ketJarak()),
+          _Cek(
+            ok: diam && terlihat,
+            judul: 'Diam sejenak',
+            sub: 'Mulai otomatis dengan hitung mundur',
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton(
+            onPressed: onMulai,
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
+            child: const Text('MULAI SEKARANG'),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _Cek extends StatelessWidget {
+  const _Cek({required this.ok, required this.judul, required this.sub});
+
+  final bool ok;
+  final String judul;
+  final String sub;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          const Icon(Icons.accessibility_new_rounded, color: Color(0xFFFFC266)),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: ok ? Pal.benar : Colors.transparent,
+              border: Border.all(
+                color: ok ? Pal.benar : Colors.white38,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: ok
+                ? const Icon(Icons.check, size: 16, color: Pal.latar)
+                : null,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  teks,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                  judul,
+                  style: Huruf.teks(
+                    tebal: FontWeight.w600,
+                    warna: ok ? Pal.kapur : Colors.white70,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
-                  petunjuk,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                  sub,
+                  style: Huruf.teks(ukuran: 12.5, warna: Colors.white54),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PanelAktif extends StatelessWidget {
+  const _PanelAktif({
+    required this.mesin,
+    required this.gerakan,
+    required this.rekam,
+    required this.target,
+    required this.detik,
+    required this.sorot,
+    required this.onAkhiri,
+  });
+
+  final MesinLatihan mesin;
+  final Gerakan gerakan;
+  final bool rekam;
+  final int target;
+  final int detik;
+  final bool sorot;
+  final VoidCallback onAkhiri;
+
+  @override
+  Widget build(BuildContext context) {
+    final setIni = mesin.hasil.where((h) => h.set == mesin.set).toList();
+    final terakhir = setIni.isEmpty ? null : setIni.last;
+    final waktu =
+        '${(detik ~/ 60).toString().padLeft(2, '0')}:${(detik % 60).toString().padLeft(2, '0')}';
+    return _Kaca(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                (rekam ? mesin.jumlah : setIni.length).toString().padLeft(
+                  2,
+                  '0',
+                ),
+                style: Huruf.angka(92),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rekam ? 'REP' : '/ $target',
+                      style: Huruf.angka(26, warna: Colors.white54),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(waktu, style: Huruf.label(warna: Colors.white54)),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (!rekam)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _SkorTerakhir(
+                    h: terakhir,
+                    gerakan: gerakan,
+                    sorot: sorot,
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Label('Frame', warna: Colors.white54),
+                      Text(
+                        '${mesin.semuaFrame.length}',
+                        style: Huruf.angka(30),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          if (!rekam) ...[
+            const SizedBox(height: 14),
+            _Slot(setIni: setIni, target: target),
+          ] else ...[
+            const SizedBox(height: 6),
+            Text(
+              'Jangan putar ponsel selama merekam.',
+              style: Huruf.teks(warna: Colors.white54, ukuran: 12.5),
+            ),
+          ],
+          const SizedBox(height: 14),
+          rekam
+              ? FilledButton(
+                  onPressed: onAkhiri,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Pal.rekam,
+                    foregroundColor: Pal.kapur,
+                  ),
+                  child: const Text('BERHENTI & SIMPAN'),
+                )
+              : OutlinedButton(
+                  onPressed: onAkhiri,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                  ),
+                  child: const Text('AKHIRI LATIHAN'),
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkorTerakhir extends StatelessWidget {
+  const _SkorTerakhir({
+    required this.h,
+    required this.gerakan,
+    required this.sorot,
+  });
+
+  final HasilRepetisi? h;
+  final Gerakan gerakan;
+  final bool sorot;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = this.h;
+    if (h == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Label('Skor form', warna: Colors.white54),
+          Text('—', style: Huruf.angka(44, warna: Colors.white38)),
+        ],
+      );
+    }
+    final warna = Pal.kelas(h.kelas);
+    return AnimatedScale(
+      scale: sorot ? 1.08 : 1,
+      duration: const Duration(milliseconds: 180),
+      alignment: Alignment.bottomRight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Label('Skor rep ${h.nomor}', warna: Colors.white54),
+          Text('${h.skor}', style: Huruf.angka(44, warna: warna)),
+          Text(
+            gerakan.kelas[h.kelas].nama.toUpperCase(),
+            style: Huruf.label(warna: warna, ukuran: 10),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Satu kotak per repetisi target; terisi warna penilaian.
+class _Slot extends StatelessWidget {
+  const _Slot({required this.setIni, required this.target});
+
+  final List<HasilRepetisi> setIni;
+  final int target;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = setIni.length > target ? setIni.length : target;
+    return SizedBox(
+      height: 10,
+      child: Row(
+        children: [
+          for (var i = 0; i < n; i++)
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                color: i < setIni.length
+                    ? Pal.kelas(setIni[i].kelas)
+                    : Colors.white12,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HitungMundur extends StatelessWidget {
+  const _HitungMundur({required this.angka});
+
+  final int angka;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0x99000000),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Label('Bersiap', warna: Pal.sinyal, ukuran: 13),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (c, a) => ScaleTransition(
+                scale: Tween(begin: 1.4, end: 1.0).animate(a),
+                child: FadeTransition(opacity: a, child: c),
+              ),
+              child: Text(
+                '$angka',
+                key: ValueKey(angka),
+                style: Huruf.angka(220, warna: Pal.sinyal),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Istirahat extends StatelessWidget {
+  const _Istirahat({
+    required this.sisa,
+    required this.total,
+    required this.setBerikut,
+    required this.jumlahSet,
+    required this.mesin,
+    required this.setSelesai,
+    required this.onLewati,
+    required this.onAkhiri,
+  });
+
+  final double sisa;
+  final double total;
+  final int setBerikut;
+  final int jumlahSet;
+  final MesinLatihan mesin;
+  final int setSelesai;
+  final VoidCallback onLewati;
+  final VoidCallback onAkhiri;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = mesin.hasil.where((h) => h.set == setSelesai).toList();
+    final benar = r.where((h) => h.benar).length;
+    final skor = r.isEmpty
+        ? 0
+        : (r.fold(0, (a, h) => a + h.skor) / r.length).round();
+    return ColoredBox(
+      color: const Color(0xF20C0E0F),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 70, 24, 24),
+          child: Column(
+            children: [
+              Label(
+                'Set $setSelesai dari $jumlahSet selesai',
+                warna: Pal.sinyal,
+                ukuran: 12,
+              ),
+              const SizedBox(height: 6),
+              Text('ISTIRAHAT', style: Huruf.angka(54)),
+              const Spacer(),
+              CincinWaktu(sisa: sisa, total: total),
+              const Spacer(),
+              Row(
+                children: [
+                  Expanded(
+                    child: Bacaan(label: 'Repetisi', nilai: '${r.length}'),
+                  ),
+                  Expanded(
+                    child: Bacaan(
+                      label: 'Benar',
+                      nilai: '$benar',
+                      warna: Pal.benar,
+                    ),
+                  ),
+                  Expanded(
+                    child: Bacaan(
+                      label: 'Skor form',
+                      nilai: '$skor',
+                      warna: Pal.sinyal,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: onLewati,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(54),
+                ),
+                child: Text('LANJUT KE SET $setBerikut'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: onAkhiri,
+                child: const Text('AKHIRI LATIHAN'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Panel bawah gelap tembus pandang.
+class _Kaca extends StatelessWidget {
+  const _Kaca({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xEB0E1112),
+        border: Border.all(color: Colors.white12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: child,
     );
   }
 }
@@ -562,359 +1150,24 @@ class _InfoTeknis extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = mesin.hasil.isEmpty ? null : mesin.hasil.last;
     String ms(double? v) => v == null ? '–' : v.toStringAsFixed(1);
+    final p = mesin.proporsi;
     final baris = [
-      'pose ${ms(sumber.msPose)} ms · ${ms(sumber.fps)} fps',
-      'fitur ${ms(h?.msFitur)} ms · klasifikasi ${ms(h?.msKlasifikasi)} ms',
-      'sudut ${ms(mesin.sudut)}° · puncak ${ms(mesin.puncak)}°',
+      'POSE ${ms(sumber.msPose)}MS · ${ms(sumber.fps)}FPS',
+      'FITUR ${ms(h?.msFitur)}MS · KLAS ${ms(h?.msKlasifikasi)}MS',
+      'PROPORSI ${p == null ? '–' : (p * 100).round()}% · DIAM ${mesin.diam ? 'Y' : 'T'}',
     ];
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      color: Colors.black54,
       child: Text(
         baris.join('\n'),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          height: 1.4,
-          fontFeatures: [FontFeature.tabularFigures()],
-        ),
+        style: Huruf.label(warna: Colors.white, ukuran: 10),
       ),
     );
   }
 }
 
-/// Batang tegak yang mengisi seiring turunnya sudut sendi utama.
-class _PengukurSudut extends StatelessWidget {
-  const _PengukurSudut({required this.mesin, required this.gerakan});
-
-  final MesinLatihan mesin;
-  final Gerakan gerakan;
-
-  @override
-  Widget build(BuildContext context) {
-    final sudut = mesin.sudut;
-    final puncak = mesin.puncak;
-    // Rentang tampilan: dari puncak (berdiri/lengan lurus) turun 100°.
-    final isi = sudut == null || puncak == null
-        ? 0.0
-        : ((puncak - sudut) / 100).clamp(0.0, 1.0);
-    const tinggi = 180.0;
-    return Column(
-      children: [
-        Container(
-          width: 14,
-          height: tinggi,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(99),
-          ),
-          alignment: Alignment.topCenter,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 90),
-            width: 14,
-            height: tinggi * isi,
-            decoration: BoxDecoration(
-              color: Warna.kerangka,
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          sudut == null ? '–' : '${sudut.round()}°',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
-        ),
-        Text(
-          gerakan.namaSudut,
-          style: const TextStyle(color: Colors.white60, fontSize: 11),
-        ),
-      ],
-    );
-  }
-}
-
-class _PanelBawah extends StatelessWidget {
-  const _PanelBawah({
-    required this.mesin,
-    required this.gerakan,
-    required this.rekam,
-    required this.target,
-    required this.detik,
-    required this.onSelesai,
-    required this.sorotTerakhir,
-  });
-
-  final MesinLatihan mesin;
-  final Gerakan gerakan;
-  final bool rekam;
-  final int target;
-  final int detik;
-  final VoidCallback onSelesai;
-  final bool sorotTerakhir;
-
-  @override
-  Widget build(BuildContext context) {
-    final terakhir = mesin.hasil.isEmpty ? null : mesin.hasil.last;
-    final waktu =
-        '${(detik ~/ 60).toString().padLeft(2, '0')}:${(detik % 60).toString().padLeft(2, '0')}';
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-      decoration: BoxDecoration(
-        color: const Color(0xE6101614),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${mesin.jumlah}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 64,
-                  height: 0.95,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -2,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      rekam ? 'repetisi' : 'dari $target',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      waktu,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              if (!rekam && mesin.jumlah > 0)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${(mesin.jumlahBenar * 100 / mesin.jumlah).round()}%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const Text(
-                      'benar',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (!rekam)
-            _KartuPenilaian(
-              gerakan: gerakan,
-              hasil: terakhir,
-              sorot: sorotTerakhir,
-            )
-          else
-            _PetunjukRekam(mesin: mesin),
-          if (mesin.hasil.isNotEmpty && !rekam) ...[
-            const SizedBox(height: 12),
-            _StripRepetisi(hasil: mesin.hasil),
-          ],
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: onSelesai,
-            style: FilledButton.styleFrom(
-              backgroundColor: rekam ? Warna.rekam : Colors.white,
-              foregroundColor: rekam ? Colors.white : Warna.malam,
-            ),
-            icon: Icon(rekam ? Icons.stop_rounded : Icons.flag_rounded),
-            label: Text(rekam ? 'Berhenti & simpan' : 'Selesai'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KartuPenilaian extends StatelessWidget {
-  const _KartuPenilaian({
-    required this.gerakan,
-    required this.hasil,
-    required this.sorot,
-  });
-
-  final Gerakan gerakan;
-  final HasilRepetisi? hasil;
-  final bool sorot;
-
-  @override
-  Widget build(BuildContext context) {
-    final h = hasil;
-    if (h == null) {
-      return const _BarisPenilaian(
-        ikon: Icons.play_arrow_rounded,
-        warna: Colors.white24,
-        judul: 'Mulai bergerak',
-        sub: 'Setiap repetisi dinilai begitu selesai',
-      );
-    }
-    final k = gerakan.kelas[h.kelas];
-    return AnimatedScale(
-      scale: sorot ? 1.0 : 0.98,
-      duration: const Duration(milliseconds: 220),
-      child: _BarisPenilaian(
-        ikon: h.benar ? Icons.check_rounded : Icons.priority_high_rounded,
-        warna: Warna.kelas(h.kelas),
-        judul: 'Repetisi ${h.nomor}: ${k.nama}',
-        sub: h.benar
-            ? 'Yakin ${(h.yakin * 100).round()}% · ${h.durasi.toStringAsFixed(1)} detik'
-            : '${k.ucapan} · yakin ${(h.yakin * 100).round()}%',
-      ),
-    );
-  }
-}
-
-class _BarisPenilaian extends StatelessWidget {
-  const _BarisPenilaian({
-    required this.ikon,
-    required this.warna,
-    required this.judul,
-    required this.sub,
-  });
-
-  final IconData ikon;
-  final Color warna;
-  final String judul;
-  final String sub;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: warna, shape: BoxShape.circle),
-          child: Icon(ikon, color: Colors.white, size: 24),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                judul,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                sub,
-                style: const TextStyle(color: Colors.white70, fontSize: 12.5),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PetunjukRekam extends StatelessWidget {
-  const _PetunjukRekam({required this.mesin});
-
-  final MesinLatihan mesin;
-
-  @override
-  Widget build(BuildContext context) {
-    final detik = mesin.semuaFrame.isEmpty
-        ? 0.0
-        : mesin.semuaFrame.last.t / 1000;
-    return _BarisPenilaian(
-      ikon: Icons.fiber_manual_record_rounded,
-      warna: Warna.rekam,
-      judul: '${mesin.semuaFrame.length} frame terekam',
-      sub:
-          'Rata-rata ${(mesin.semuaFrame.length / (detik <= 0 ? 1 : detik)).toStringAsFixed(1)} '
-          'fps. Jangan putar ponsel selama merekam.',
-    );
-  }
-}
-
-class _StripRepetisi extends StatelessWidget {
-  const _StripRepetisi({required this.hasil});
-
-  final List<HasilRepetisi> hasil;
-
-  @override
-  Widget build(BuildContext context) {
-    final tampil = hasil.length > 14 ? hasil.sublist(hasil.length - 14) : hasil;
-    return Row(
-      children: [
-        for (final h in tampil)
-          Expanded(
-            child: Container(
-              height: 6,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: Warna.kelas(h.kelas),
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
-          ),
-        for (var i = tampil.length; i < 10; i++)
-          Expanded(
-            child: Container(
-              height: 6,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Latar mode demo: lantai bergaris tipis supaya kerangka tidak melayang.
+/// Latar mode demo: grid tipis seperti lantai studio pengukuran.
 class _LantaiDemo extends StatelessWidget {
   const _LantaiDemo();
 
@@ -927,17 +1180,12 @@ class _LukisLantai extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(
       Offset.zero & size,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF14211E), Color(0xFF0A0F0E)],
-        ).createShader(Offset.zero & size),
+      Paint()..color = const Color(0xFF0F1213),
     );
     final garis = Paint()
-      ..color = Colors.white.withValues(alpha: 0.05)
-      ..strokeWidth = 1.5;
-    final langkah = size.shortestSide / 10;
+      ..color = Colors.white.withValues(alpha: 0.045)
+      ..strokeWidth = 1;
+    final langkah = size.shortestSide / 12;
     for (var x = 0.0; x <= size.width; x += langkah) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), garis);
     }
@@ -962,37 +1210,27 @@ class _Galat extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.videocam_off_rounded,
-              color: Colors.white70,
-              size: 48,
-            ),
-            const SizedBox(height: 16),
+            const Label('Kamera', warna: Pal.salah),
+            const SizedBox(height: 8),
             Text(
               kameraTersedia
-                  ? 'Kamera tidak bisa dibuka'
-                  : 'Kamera hanya tersedia di aplikasi Android',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+                  ? 'KAMERA TIDAK BISA DIBUKA'
+                  : 'KAMERA HANYA DI APLIKASI ANDROID',
+              style: Huruf.angka(40),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               kameraTersedia
                   ? 'Pastikan izin kamera diberikan, lalu coba lagi.\n\n$pesan'
                   : 'Di browser, coba mode demo untuk melihat cara kerjanya.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
+              style: Huruf.teks(warna: Pal.redup),
             ),
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
-              child: const Text('Kembali'),
+              child: const Text('KEMBALI'),
             ),
           ],
         ),

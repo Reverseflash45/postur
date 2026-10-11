@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
+
 import '../inti/pose.dart';
 import 'penyimpanan.dart';
 
@@ -16,6 +18,8 @@ class InfoRekaman {
     required this.detik,
     required this.dibuat,
     required this.ukuran,
+    this.ditinjau = 0,
+    this.labelRep = const [],
   });
 
   final String path;
@@ -28,6 +32,25 @@ class InfoRekaman {
   final double detik;
   final DateTime dibuat;
   final int ukuran;
+
+  /// Jumlah repetisi yang labelnya diubah atau dibuang di layar Tinjau.
+  final int ditinjau;
+
+  /// Label per repetisi dari tinjauan (null = label set, 'BUANG').
+  final List<String?> labelRep;
+
+  /// Jumlah repetisi per label setelah tinjauan; tanpa tinjauan semua
+  /// repetisi (hitungan manual) masuk ke label set.
+  Map<String, int> get sebaranLabel {
+    if (labelRep.isEmpty) return {label: repetisi ?? repetisiOtomatis ?? 0};
+    final hasil = <String, int>{};
+    for (final l in labelRep) {
+      final efektif = l ?? label;
+      if (efektif == 'BUANG') continue;
+      hasil[efektif] = (hasil[efektif] ?? 0) + 1;
+    }
+    return hasil;
+  }
 }
 
 /// Berkas sesi berformat sama dengan ml/postur/data.py (format "postur-sesi").
@@ -106,6 +129,10 @@ class Rekaman {
                 DateTime.tryParse(js['dibuat'] as String? ?? '') ??
                 DateTime(2000),
             ukuran: isi.length,
+            ditinjau: (js['label_rep'] as List? ?? const [])
+                .where((l) => l != null)
+                .length,
+            labelRep: (js['label_rep'] as List? ?? const []).cast<String?>(),
           ),
         );
       } catch (_) {
@@ -117,4 +144,41 @@ class Rekaman {
   }
 
   static Future<void> hapus(String path) => Penyimpanan.instance.hapus(path);
+
+  /// Salin rekaman demo bawaan ke daftar rekaman, untuk mencoba alur
+  /// tinjau dan ekspor tanpa merekam orang sungguhan.
+  static Future<void> imporContoh() async {
+    for (final g in ['squat', 'pushup']) {
+      final js = jsonDecode(
+        await rootBundle.loadString('assets/demo/$g.json'),
+      ) as Map<String, dynamic>;
+      js['subjek'] = 'CONTOH';
+      js['id'] = 'CONTOH-$g';
+      js['repetisi_manual'] = (js['label_rep'] as List?)?.length;
+      js['repetisi_otomatis'] = js['repetisi_manual'];
+      js['dibuat'] = DateTime.now().toIso8601String();
+      // label_rep demo berisi label sebenarnya tiap repetisi; dikosongkan
+      // supaya tinjauan dimulai dari label set, seperti rekaman asli.
+      js['label_rep_asli'] = js.remove('label_rep');
+      await Penyimpanan.instance.tulis(
+        '$folder/CONTOH-$g.json',
+        jsonEncode(js),
+      );
+    }
+  }
+
+  /// Isi lengkap berkas sesi.
+  static Future<Map<String, dynamic>?> baca(String path) async {
+    final isi = await Penyimpanan.instance.baca(path);
+    return isi == null ? null : jsonDecode(isi) as Map<String, dynamic>;
+  }
+
+  /// Simpan label per repetisi hasil tinjauan. null = ikut label set,
+  /// 'BUANG' = repetisi tidak dipakai. Dibaca ml/postur/data.py.
+  static Future<void> simpanLabel(String path, List<String?> labelRep) async {
+    final js = await baca(path);
+    if (js == null) return;
+    js['label_rep'] = labelRep.every((l) => l == null) ? null : labelRep;
+    await Penyimpanan.instance.tulis(path, jsonEncode(js));
+  }
 }

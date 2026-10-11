@@ -5,7 +5,7 @@ import '../inti/klasifikasi/aturan.dart';
 import '../inti/klasifikasi/klasifikasi.dart';
 import '../inti/paket_model.dart';
 import '../tema.dart';
-import 'beranda.dart';
+import 'bersama.dart';
 
 /// Ringkasan model yang terpasang: asal data, hasil validasi, ambang aturan.
 class LayarInfoModel extends StatelessWidget {
@@ -14,26 +14,34 @@ class LayarInfoModel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Info model')),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          4,
-          16,
-          32 + MediaQuery.paddingOf(context).bottom,
-        ),
-        children: [
-          for (final g in semuaGerakan) _KartuPaket(gerakan: g),
-          const SizedBox(height: 8),
-          Text(
-            'Model dibuat dengan `python -m postur latih`, lalu folder model/ disalin ke '
-            'app/assets/model/<gerakan>/. F1 = macro-F1 rerata validasi silang per subjek.',
-            style: TextStyle(
-              color: Theme.of(context).hintColor,
-              fontSize: 12.5,
-            ),
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            0,
+            0,
+            0,
+            32 + MediaQuery.paddingOf(context).bottom,
           ),
-        ],
+          children: [
+            const KepalaLayar(kembali: true, atas: 'Lab', judul: 'Info model'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final g in semuaGerakan) _KartuPaket(gerakan: g),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Model dibuat dengan `python -m postur latih`, lalu folder model/ disalin ke '
+                    'app/assets/model/<gerakan>/. F1 = macro-F1 rerata validasi silang per subjek.',
+                    style: Huruf.teks(warna: Pal.samar, ukuran: 12.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -52,7 +60,6 @@ class _KartuPaket extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final skema = Theme.of(context).colorScheme;
     return FutureBuilder(
       future: _muat(),
       builder: (context, snap) {
@@ -68,60 +75,48 @@ class _KartuPaket extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             JudulBagian(gerakan.nama),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _Lencana(
-                          teks: p.sintetis ? 'Data sintetis' : 'Data asli',
-                          warna: p.sintetis ? Warna.salah : Warna.benar,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${p.nRepetisi} repetisi · ${p.nSubjek} subjek',
-                            style: TextStyle(color: skema.onSurfaceVariant),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Dilatih ${p.dibuat.replaceFirst('T', ' ').split('+').first}',
-                      style: TextStyle(
-                        color: skema.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    for (final id in urutanModel)
-                      _BarisF1(
-                        nama: namaModel[id]!,
-                        f1: p.f1(id),
-                        aktif: id == aktif,
-                        tersedia: p.tersedia.contains(id),
-                      ),
-                    const Divider(height: 24),
-                    const Text(
-                      'Ambang aturan',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    for (final a in aturan)
-                      Text(
-                        a,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: skema.onSurfaceVariant,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                  ],
+            Row(
+              children: [
+                Lencana(
+                  p.sintetis ? 'Data sintetis' : 'Data asli',
+                  warna: p.sintetis ? Pal.sinyal : Pal.benar,
                 ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Label('${p.nRepetisi} rep · ${p.nSubjek} subjek'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Label(
+              'Dilatih ${p.dibuat.replaceFirst('T', ' ').split('+').first}',
+              warna: Pal.samar,
+              ukuran: 10,
+            ),
+            const SizedBox(height: 14),
+            for (final id in urutanModel)
+              _BarisF1(
+                nama: namaModel[id]!,
+                f1: p.f1(id),
+                aktif: id == aktif,
+                tersedia: p.tersedia.contains(id),
+              ),
+            const SizedBox(height: 14),
+            Panel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Label('Ambang aturan', warna: Pal.kapur),
+                  const SizedBox(height: 8),
+                  for (final a in aturan)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        a.toUpperCase(),
+                        style: Huruf.label(ukuran: 11),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -146,76 +141,45 @@ class _BarisF1 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final skema = Theme.of(context).colorScheme;
     final nilai = f1 ?? 0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 9),
       child: Row(
         children: [
           SizedBox(
-            width: 108,
+            width: 112,
             child: Text(
-              nama,
-              style: TextStyle(
-                fontWeight: aktif ? FontWeight.w800 : FontWeight.w500,
-                color: tersedia
-                    ? null
-                    : skema.onSurfaceVariant.withValues(alpha: 0.6),
+              nama.toUpperCase(),
+              style: Huruf.label(
+                ukuran: 10.5,
+                warna: aktif ? Pal.kapur : (tersedia ? Pal.redup : Pal.samar),
               ),
             ),
           ),
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(
-                value: nilai,
-                minHeight: 8,
-                color: aktif
-                    ? Warna.utama
-                    : Warna.utama.withValues(alpha: 0.45),
-                backgroundColor: skema.surfaceContainerHighest,
+            child: LayoutBuilder(
+              builder: (context, c) => Stack(
+                children: [
+                  Container(height: 8, color: Pal.lapis2),
+                  Container(
+                    height: 8,
+                    width: c.maxWidth * nilai,
+                    color: aktif ? Pal.sinyal : Pal.garisKuat,
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 40,
+            width: 46,
             child: Text(
-              f1 == null ? '–' : f1!.toStringAsFixed(3),
+              f1 == null ? '—' : f1!.toStringAsFixed(3),
               textAlign: TextAlign.end,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
+              style: Huruf.angka(20, warna: aktif ? Pal.sinyal : Pal.kapur),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Lencana extends StatelessWidget {
-  const _Lencana({required this.teks, required this.warna});
-
-  final String teks;
-  final Color warna;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: warna.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(
-        teks,
-        style: TextStyle(
-          color: warna,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
       ),
     );
   }

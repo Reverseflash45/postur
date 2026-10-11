@@ -30,6 +30,7 @@ def main(argv=None):
     s.add_argument("--benih", type=int, default=0)
     s.add_argument("--model", default="aturan,rf,cnn,lstm")
     s.add_argument("--tanpa-ekspor", action="store_true")
+    s.add_argument("--tanpa-kurva", action="store_true", help="lewati kurva belajar")
 
     s = sub.add_parser("periksa", help="ringkasan isi folder sesi dan repetisi yang terdeteksi")
     s.add_argument("--data", type=Path, required=True)
@@ -74,7 +75,7 @@ def main(argv=None):
         for gid in daftar:
             eksperimen(a.data, gid, a.keluar, k=a.fold, aug=a.augmentasi, epoch=a.epoch,
                        benih=a.benih, anotasi=a.anotasi, model=tuple(a.model.split(",")),
-                       ekspor=not a.tanpa_ekspor)
+                       ekspor=not a.tanpa_ekspor, kurva=not a.tanpa_kurva)
 
     elif a.perintah == "periksa":
         import csv

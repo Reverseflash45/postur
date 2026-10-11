@@ -15,7 +15,7 @@ from scipy.stats import binomtest
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_recall_fscore_support
 from sklearn.model_selection import GroupKFold
 
-from . import saraf
+from . import analisis, saraf
 from .augmentasi import perbanyak
 from .aturan import KlasifikasiAturan
 from .data import Repetisi, larik, muat_dataset
@@ -96,7 +96,7 @@ def evaluasi_hitung(sesi, g: Gerakan) -> dict:
 
 def eksperimen(folder: Path, id_gerakan: str, keluar: Path, k: int = 5, aug: int = 2,
                epoch: int = 80, benih: int = 0, anotasi: Path | None = None,
-               model=MODEL, ekspor: bool = True) -> dict:
+               model=MODEL, ekspor: bool = True, kurva: bool = True) -> dict:
     t_mulai = time.time()
     g, sesi, reps = muat_dataset(folder, id_gerakan, anotasi)
     out = Path(keluar) / g.id
@@ -179,16 +179,29 @@ def eksperimen(folder: Path, id_gerakan: str, keluar: Path, k: int = 5, aug: int
         for b in utama[i + 1:]:
             mcnemar[f"{a}_vs_{b}"] = _mcnemar(oof[a] == y, oof[b] == y)
 
+    print("  analisis tambahan: F1 per subjek, fitur penting" + (", kurva belajar" if kurva else ""))
+    per_subjek = analisis.f1_per_subjek(y, {m: oof[m] for m in MODEL if m in model}, grup, n_kelas)
+    analisis.gambar_per_subjek(per_subjek, NAMA_MODEL, f"{g.nama} – macro-F1 per subjek", out / "per_subjek.png")
+    penting = analisis.fitur_penting(reps, g, aug, benih)
+    analisis.gambar_fitur(penting, f"{g.nama} – 15 fitur terpenting (RF)", out / "fitur_penting.png")
+    kb = None
+    if kurva:
+        kb = analisis.kurva_belajar(reps, g, k, aug, benih)
+        analisis.gambar_kurva(kb, f"{g.nama} – kurva belajar", out / "kurva_belajar.png")
+
     metrik = {
         "gerakan": g.id, "dibuat": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sumber_pose": sumber, "n_sesi": len(sesi), "n_repetisi": len(reps),
         "n_subjek": len(subjek), "k_fold": k, "augmentasi": aug, "epoch_maks": epoch,
         "per_kelas_n": {c: int(np.sum(y == i)) for i, c in enumerate(g.kode)},
         "hitung_repetisi": hitung, "model": hasil_model, "mcnemar": mcnemar,
-        "ambang_aturan_per_fold": ambang_fold, "durasi_detik": round(time.time() - t_mulai, 1),
+        "ambang_aturan_per_fold": ambang_fold, "f1_per_subjek": per_subjek,
+        "fitur_penting": penting, "kurva_belajar": kb,
+        "durasi_detik": round(time.time() - t_mulai, 1),
     }
     (out / "metrik.json").write_text(json.dumps(metrik, indent=2), encoding="utf-8")
     (out / "laporan.md").write_text(tulis_laporan(metrik, g), encoding="utf-8")
+    (out / "tabel.tex").write_text(analisis.tulis_latex(metrik, g, NAMA_MODEL), encoding="utf-8")
     print(f"  laporan: {out / 'laporan.md'}")
 
     if ekspor:
@@ -244,6 +257,36 @@ def tulis_laporan(m: dict, g: Gerakan) -> str:
                      f"{i8['macro_f1_rerata'] - f32['macro_f1_rerata']:+.3f} | "
                      f"{f32['latensi_desktop_ms']:.2f} / {i8['latensi_desktop_ms']:.2f} |")
         b += ["", "Latensi di ponsel diukur lewat layar *Uji kinerja* di aplikasi."]
+
+    per = m.get("f1_per_subjek")
+    if per:
+        utama = [x for x in MODEL if x in per]
+        b += ["", "## Macro-F1 per subjek", "",
+              "Variasi antar-subjek menunjukkan seberapa stabil model pada orang yang tidak pernah dilihat.", "",
+              "| Subjek | " + " | ".join(NAMA_MODEL[x] for x in utama) + " |",
+              "|---|" + "---|" * len(utama)]
+        for s in per[utama[0]]:
+            b.append(f"| {s} | " + " | ".join(f"{per[x][s]:.3f}" for x in utama) + " |")
+        b.append("| **Terendah** | " + " | ".join(f"{min(per[x].values()):.3f}" for x in utama) + " |")
+        b += ["", "![F1 per subjek](per_subjek.png)"]
+
+    if m.get("fitur_penting"):
+        b += ["", "## Fitur terpenting (Random Forest)", "",
+              "Penurunan impurity rerata; fitur ringkasan dari deret sudut per repetisi.", "",
+              "| # | Fitur | Kepentingan |", "|---|---|---|"]
+        b += [f"| {i + 1} | `{f['fitur']}` | {f['nilai']:.4f} |" for i, f in enumerate(m["fitur_penting"])]
+        b += ["", "![Fitur penting](fitur_penting.png)"]
+
+    kb = m.get("kurva_belajar")
+    if kb:
+        b += ["", "## Kurva belajar", "",
+              "Macro-F1 pada subjek uji bila model dilatih dengan sebagian subjek latih saja.", "",
+              "| Subjek latih | Aturan | Random Forest |", "|---|---|---|"]
+        for n, a, r in zip(kb["ukuran"], kb["aturan"], kb["rf"]):
+            b.append(f"| {n} | {a['rerata']:.3f} ± {a['sb']:.3f} | {r['rerata']:.3f} ± {r['sb']:.3f} |")
+        b += ["", "![Kurva belajar](kurva_belajar.png)"]
+
+    b += ["", "Tabel siap pakai untuk LaTeX ada di `tabel.tex` (butuh paket `booktabs`)."]
 
     h = m["hitung_repetisi"]
     if h.get("n_set"):

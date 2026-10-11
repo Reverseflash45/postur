@@ -16,6 +16,7 @@ class CatatanLatihan {
     this.demo = false,
     this.msPose,
     this.fps,
+    this.jumlahSet = 1,
   });
 
   factory CatatanLatihan.dariJson(Map<String, dynamic> js) => CatatanLatihan(
@@ -28,6 +29,7 @@ class CatatanLatihan {
     demo: js['demo'] as bool? ?? false,
     msPose: (js['ms_pose'] as num?)?.toDouble(),
     fps: (js['fps'] as num?)?.toDouble(),
+    jumlahSet: js['jumlah_set'] as int? ?? 1,
     repetisi: [
       for (final r in js['repetisi'] as List)
         HasilRepetisi.dariJson(r as Map<String, dynamic>),
@@ -43,7 +45,15 @@ class CatatanLatihan {
   final bool demo;
   final double? msPose;
   final double? fps;
+  final int jumlahSet;
   final List<HasilRepetisi> repetisi;
+
+  /// Rerata skor form (0–100) repetisi yang dinilai.
+  int? get skor {
+    final d = repetisi.where((r) => r.kelas >= 0).toList();
+    if (d.isEmpty) return null;
+    return (d.fold(0, (a, r) => a + r.skor) / d.length).round();
+  }
 
   int get benar => repetisi.where((r) => r.benar).length;
   double get persenBenar => repetisi.isEmpty ? 0 : benar / repetisi.length;
@@ -58,6 +68,7 @@ class CatatanLatihan {
     'demo': demo,
     if (msPose != null) 'ms_pose': msPose,
     if (fps != null) 'fps': fps,
+    'jumlah_set': jumlahSet,
     'repetisi': [for (final r in repetisi) r.keJson()],
   };
 }

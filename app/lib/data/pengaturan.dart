@@ -34,9 +34,30 @@ class Pengaturan extends ChangeNotifier {
   bool get infoTeknis => _p.getBool('info_teknis') ?? false;
   set infoTeknis(bool v) => _setBool('info_teknis', v);
 
+  /// Panduan pertama kali sudah dilihat.
+  bool get sudahPanduan => _p.getBool('sudah_panduan') ?? false;
+  set sudahPanduan(bool v) => _setBool('sudah_panduan', v);
+
+  /// Semua model ikut menilai setiap repetisi (untuk perbandingan).
+  bool get bandingkan => _p.getBool('bandingkan') ?? false;
+  set bandingkan(bool v) => _setBool('bandingkan', v);
+
   int get target => _p.getInt('target') ?? 10;
   set target(int v) {
     _p.setInt('target', v);
+    notifyListeners();
+  }
+
+  int get jumlahSet => _p.getInt('jumlah_set') ?? 3;
+  set jumlahSet(int v) {
+    _p.setInt('jumlah_set', v);
+    notifyListeners();
+  }
+
+  /// Lama istirahat antar-set (detik).
+  int get istirahat => _p.getInt('istirahat') ?? 60;
+  set istirahat(int v) {
+    _p.setInt('istirahat', v);
     notifyListeners();
   }
 

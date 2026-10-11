@@ -116,7 +116,10 @@ def muat_folder(folder: Path, gerakan: str | None = None) -> list[Sesi]:
 
 
 def muat_anotasi(path: Path | None) -> dict[tuple[str, int], str]:
-    """anotasi.csv berkolom sesi,rep,label. Label BUANG = repetisi dibuang."""
+    """anotasi.csv berkolom sesi,rep,label. Label BUANG = repetisi dibuang.
+
+    Prioritas label: anotasi.csv > label_rep di berkas sesi (dari aplikasi) > label set.
+    """
     if path is None or not Path(path).exists():
         return {}
     with open(path, encoding="utf-8", newline="") as f:
@@ -126,9 +129,12 @@ def muat_anotasi(path: Path | None) -> dict[tuple[str, int], str]:
 def potong_repetisi(s: Sesi, gerakan: Gerakan, anotasi: dict | None = None,
                     hitung_fitur: bool = True) -> list[Repetisi]:
     anotasi = anotasi or {}
+    # Label per repetisi dari layar "Tinjau" di aplikasi (null = ikut label set).
+    label_rep = s.meta.get("label_rep") or []
     hasil = []
     for k, (a, b) in enumerate(segmentasi(s.t, s.xy, s.vis, gerakan)):
-        label = anotasi.get((s.id, k), s.label)
+        dari_app = label_rep[k] if k < len(label_rep) and label_rep[k] else s.label
+        label = anotasi.get((s.id, k), dari_app)
         if label == BUANG:
             continue
         if label not in gerakan.kode:
