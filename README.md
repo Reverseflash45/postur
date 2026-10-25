@@ -2,7 +2,7 @@
 
 ![Layar Postur: pilih gerakan, latihan dengan bagian tubuh yang salah menyala, dan ringkasan sesi](docs/tampilan.webp)
 
-**[Coba di browser](https://postur-tau.vercel.app)** (webcam, tanpa instalasi) ·
+**[Coba di browser](https://postur.raffstw.my.id)** (webcam, tanpa instalasi) ·
 **[Unduh APK terbaru](https://github.com/Reverseflash45/postur/releases/latest)** · Android 7.0+, arm64
 
 Deteksi kesalahan postur **squat** dan **push-up** dari kamera ponsel. Pose
